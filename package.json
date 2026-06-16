@@ -1,0 +1,94 @@
+{
+  "name": "pixel-vscode",
+  "displayName": "Pixel VSCode",
+  "description": "Create and edit pixel art PNG files directly in VS Code.",
+  "version": "0.0.1",
+  "publisher": "majinbaka",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/majinbaka/pixel-vscode.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCustomEditor:pixelVscode.pixelEditor",
+    "onCommand:pixelVscode.newFile",
+    "onCommand:pixelVscode.openEditor",
+    "onCommand:pixelVscode.previewAnimation"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "pixelVscode.newFile",
+        "title": "Pixel: New Pixel Image"
+      },
+      {
+        "command": "pixelVscode.openEditor",
+        "title": "Pixel: Open With Pixel Editor"
+      },
+      {
+        "command": "pixelVscode.previewAnimation",
+        "title": "Pixel: Preview PNG Animation"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "pixelVscode.openEditor",
+          "when": "resourceExtname == .png",
+          "group": "navigation"
+        },
+        {
+          "command": "pixelVscode.previewAnimation",
+          "when": "resourceExtname == .png",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "pixelVscode.openEditor",
+          "when": "resourceExtname == .png",
+          "group": "navigation"
+        },
+        {
+          "command": "pixelVscode.previewAnimation",
+          "when": "resourceExtname == .png",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "pixelVscode.pixelEditor",
+        "displayName": "Pixel Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.png"
+          }
+        ],
+        "priority": "option"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "check": "tsc --noEmit -p ./"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.8",
+    "@types/pngjs": "^6.0.5",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.2"
+  }
+}

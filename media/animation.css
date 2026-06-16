@@ -1,0 +1,342 @@
+:root {
+  color-scheme: light dark;
+  --toolbar-height: 52px;
+  --border: var(--vscode-panel-border);
+  --surface: var(--vscode-editor-background);
+  --surface-raised: var(--vscode-sideBar-background);
+  --surface-hover: var(--vscode-toolbar-hoverBackground);
+  --text: var(--vscode-foreground);
+  --muted: var(--vscode-descriptionForeground);
+  --accent: var(--vscode-button-background);
+  --accent-text: var(--vscode-button-foreground);
+  --focus: var(--vscode-focusBorder);
+  --pixel-size: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--surface);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.animation-app {
+  display: grid;
+  grid-template-rows: var(--toolbar-height) minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+}
+
+.animation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: max-content;
+  height: 36px;
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+}
+
+.tool-group:last-child {
+  border-right: 0;
+}
+
+.push {
+  margin-left: auto;
+}
+
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 62px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  background: var(--surface-hover);
+}
+
+.text-button:focus-visible,
+.number-input:focus-visible,
+.range:focus-visible,
+.check-label input:focus-visible,
+.frame-row:focus-visible,
+.duration-input:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.primary {
+  color: var(--accent-text);
+  background: var(--accent);
+}
+
+.primary:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.compact-label,
+.metric,
+.status,
+.check-label,
+.panel-count,
+.frame-meta,
+.duration-unit {
+  color: var(--muted);
+  user-select: none;
+}
+
+.check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+}
+
+.status {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric {
+  width: 34px;
+  text-align: right;
+}
+
+.range {
+  width: 110px;
+  accent-color: var(--accent);
+}
+
+.number-input,
+.duration-input {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+}
+
+.number-input {
+  width: 76px;
+}
+
+.animation-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: 0;
+}
+
+.preview-workspace {
+  overflow: auto;
+  padding: 32px;
+  background:
+    linear-gradient(var(--vscode-editor-background), var(--vscode-editor-background)),
+    var(--vscode-editorWidget-background);
+}
+
+.preview-frame {
+  position: relative;
+  width: max-content;
+  height: max-content;
+  min-width: 1px;
+  min-height: 1px;
+  margin: 0 auto;
+  box-shadow: 0 0 0 1px var(--border);
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #d5d5d5 25%, transparent 25%),
+    linear-gradient(-45deg, #d5d5d5 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d5d5d5 75%),
+    linear-gradient(-45deg, transparent 75%, #d5d5d5 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.preview-frame::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--vscode-foreground) 20%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--vscode-foreground) 20%, transparent) 1px, transparent 1px);
+  background-size: var(--pixel-size) var(--pixel-size);
+}
+
+.preview-canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.frames-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frames-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+}
+
+.frame-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 72px 20px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.frame-row:hover {
+  background: var(--surface-hover);
+}
+
+.frame-row.active {
+  border-color: var(--focus);
+  background: color-mix(in srgb, var(--focus) 14%, transparent);
+}
+
+.frame-thumbnail {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(45deg, #d5d5d5 25%, transparent 25%),
+    linear-gradient(-45deg, #d5d5d5 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d5d5d5 75%),
+    linear-gradient(-45deg, transparent 75%, #d5d5d5 75%);
+  background-color: #fff;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-size: 12px 12px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.frame-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.frame-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frame-meta,
+.duration-unit {
+  font-size: 11px;
+}
+
+.duration-input {
+  width: 72px;
+}
+
+@media (max-width: 760px) {
+  .animation-app {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .animation-toolbar {
+    flex-wrap: wrap;
+    height: auto;
+    overflow-x: visible;
+  }
+
+  .push {
+    margin-left: 0;
+  }
+
+  .animation-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(240px, 1fr) minmax(180px, 42vh);
+  }
+
+  .preview-workspace {
+    padding: 18px;
+  }
+
+  .frames-panel {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
