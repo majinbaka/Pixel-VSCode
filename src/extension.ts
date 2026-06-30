@@ -3,9 +3,8 @@ import * as vscode from 'vscode';
 import { PNG } from 'pngjs';
 import { createPixelMonsterCharacter, syncPixelMonsterCharacter } from './characterAssets';
 import { deleteCollisionPolygon, readCollisionPolygon, writeCollisionPolygon } from './collisionShape';
+import { LayerStateFile, readLayerState, writeLayerState } from './layerState';
 import { createGodotMap, MapEditorProvider } from './mapEditor';
-import { createPixelMonsterHud, HudEditorProvider } from './hudEditor';
-import { TscnPreviewProvider } from './tscnPreview';
 
 const VIEW_TYPE = 'pixelVscode.pixelEditor';
 const ANIMATION_VIEW_TYPE = 'pixelVscode.animationPreview';
@@ -13,16 +12,8 @@ const ANIMATION_VIEW_TYPE = 'pixelVscode.animationPreview';
 export function activate(context: vscode.ExtensionContext) {
   const provider = new PixelEditorProvider(context);
   const mapProvider = new MapEditorProvider(context);
-  const hudProvider = new HudEditorProvider(context);
-  const tscnProvider = new TscnPreviewProvider(context);
 
   context.subscriptions.push(
-    vscode.window.registerCustomEditorProvider(TscnPreviewProvider.viewType, tscnProvider, {
-      supportsMultipleEditorsPerDocument: true,
-      webviewOptions: {
-        retainContextWhenHidden: true
-      }
-    }),
     vscode.window.registerCustomEditorProvider(VIEW_TYPE, provider, {
       supportsMultipleEditorsPerDocument: false,
       webviewOptions: {
@@ -35,15 +26,8 @@ export function activate(context: vscode.ExtensionContext) {
         retainContextWhenHidden: true
       }
     }),
-    vscode.window.registerCustomEditorProvider(HudEditorProvider.viewType, hudProvider, {
-      supportsMultipleEditorsPerDocument: false,
-      webviewOptions: {
-        retainContextWhenHidden: true
-      }
-    }),
     vscode.commands.registerCommand('pixelVscode.newFile', () => createNewPixelFile()),
     vscode.commands.registerCommand('pixelVscode.newGodotMap', () => createGodotMap()),
-    vscode.commands.registerCommand('pixelVscode.newPixelMonsterHud', () => createPixelMonsterHud()),
     vscode.commands.registerCommand('pixelVscode.newPixelMonsterCharacter', () => createPixelMonsterCharacter()),
     vscode.commands.registerCommand('pixelVscode.openEditor', (resource?: vscode.Uri) => openWithPixelEditor(resource)),
     vscode.commands.registerCommand('pixelVscode.previewAnimation', (resource?: vscode.Uri, selectedResources?: vscode.Uri[]) =>
@@ -51,27 +35,11 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand('pixelVscode.syncPixelMonsterCharacter', (resource?: vscode.Uri) =>
       syncPixelMonsterCharacter(resource)
-    ),
-    vscode.commands.registerCommand('pixelVscode.previewTscn', (resource?: vscode.Uri) =>
-      openTscnPreview(resource)
     )
   );
 }
 
 export function deactivate() {}
-
-async function openTscnPreview(resource?: vscode.Uri) {
-  const uri = resource ?? vscode.window.activeTextEditor?.document.uri;
-  if (!uri) {
-    vscode.window.showWarningMessage('Select a .tscn file to preview.');
-    return;
-  }
-  if (path.extname(uri.path).toLowerCase() !== '.tscn') {
-    vscode.window.showWarningMessage('Scene preview only supports .tscn files.');
-    return;
-  }
-  await vscode.commands.executeCommand('vscode.openWith', uri, TscnPreviewProvider.viewType);
-}
 
 async function createNewPixelFile() {
   const sizeInput = await vscode.window.showInputBox({
@@ -399,12 +367,14 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
     const postDocument = async () => {
       const assetProfile = getPixelAssetProfile(document.uri);
       const collisionPoints = await readCollisionPolygon(document.uri);
+      const layerState = await readLayerState(document.uri);
       webviewPanel.webview.postMessage({
         type: 'init',
         filename: path.basename(document.uri.path),
         dataUri: `data:image/png;base64,${Buffer.from(document.data).toString('base64')}`,
         assetProfile,
-        collisionPoints
+        collisionPoints,
+        layerState
       });
     };
 
@@ -421,7 +391,7 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
           if (!message.dataUri) {
             return;
           }
-          this.applyEdit(document, message.dataUri, message.label ?? 'Edit pixels');
+          await this.applyEdit(document, message.dataUri, message.label ?? 'Edit pixels', message.layerState);
           return;
 
         case 'save':
@@ -476,11 +446,15 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
     };
   }
 
-  private applyEdit(document: PixelDocument, dataUri: string, label: string) {
+  private async applyEdit(document: PixelDocument, dataUri: string, label: string, layerState?: LayerStateFile) {
     const nextBytes = decodePngDataUri(dataUri);
     if (!nextBytes) {
       vscode.window.showErrorMessage('Pixel Editor could not read the edited PNG data.');
       return;
+    }
+
+    if (layerState) {
+      await writeLayerState(document.uri, layerState);
     }
 
     const previousBytes = document.data;
@@ -579,11 +553,13 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
       </section>
 
       <section class="tool-group" aria-label="Rig">
-        <button class="icon-button" type="button" data-tool="rig" title="Rig: drag the pivot, then drag the handle to rotate the active layer" aria-label="Rig tool">🦴</button>
+        <button class="icon-button" type="button" data-tool="rig" title="Rig: click a pivot to select it, drag the pivot, then drag the handle to rotate" aria-label="Rig tool">🦴</button>
         <label class="compact-label" for="rigAngle">Angle</label>
         <input id="rigAngle" class="number-input" type="number" step="1" value="0" title="Rotation angle in degrees">
-        <button id="applyRigButton" class="text-button" type="button" title="Bake the current rotation into the active layer's pixels">Apply</button>
-        <button id="resetRigButton" class="text-button" type="button" title="Reset rotation and pivot for the active layer">Reset</button>
+        <button id="addPivotButton" class="text-button" type="button" title="Add a new pivot point to the active layer">+ Pivot</button>
+        <div id="pivotsList" class="pivots-list" aria-label="Pivot points"></div>
+        <button id="applyRigButton" class="text-button" type="button" title="Bake the current rotations into the active layer's pixels">Apply</button>
+        <button id="resetRigButton" class="text-button" type="button" title="Reset rotation and position for the active pivot">Reset</button>
       </section>
 
       <section class="tool-group push" aria-label="File">
@@ -599,6 +575,7 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
           <canvas id="pixelCanvas" class="pixel-canvas" aria-label="Pixel canvas"></canvas>
           <svg id="hitboxOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
           <svg id="rigOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
+          <div id="cursorOverlay" class="cursor-overlay" aria-hidden="true" hidden></div>
         </div>
       </section>
 
@@ -719,7 +696,7 @@ type AnimationPreviewMessage =
 
 type WebviewMessage =
   | { type: 'ready' }
-  | { type: 'edit'; dataUri?: string; label?: string }
+  | { type: 'edit'; dataUri?: string; label?: string; layerState?: LayerStateFile }
   | { type: 'save' }
   | { type: 'syncCharacter' }
   | { type: 'saveCollision'; points?: number[] };

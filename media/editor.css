@@ -250,6 +250,20 @@ button:disabled {
   pointer-events: none;
 }
 
+.cursor-overlay {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid #ffffff;
+  outline: 1px solid #000000;
+  background: color-mix(in srgb, #ffffff 18%, transparent);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.cursor-overlay[hidden] {
+  display: none;
+}
+
 .hitbox-polygon {
   fill: color-mix(in srgb, #ff2d6d 22%, transparent);
   stroke: #ff2d6d;
@@ -278,11 +292,52 @@ button:disabled {
   vector-effect: non-scaling-stroke;
 }
 
+.rig-pivot.inactive {
+  fill: #8595a1;
+  opacity: 0.7;
+}
+
 .rig-handle {
   fill: #ffffff;
   stroke: #2fed9e;
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
+}
+
+.pivots-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.pivot-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.pivot-item.active {
+  border-color: #2fed9e;
+  background: rgba(47, 237, 158, 0.15);
+}
+
+.pivot-name {
+  pointer-events: none;
+}
+
+.pivot-delete {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  line-height: 1;
+  padding: 0;
+  font-size: 12px;
 }
 
 .side-panel {

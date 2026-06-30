@@ -35,10 +35,13 @@
   const clearHitboxButton = document.getElementById('clearHitboxButton');
   const saveHitboxButton = document.getElementById('saveHitboxButton');
   const hitboxPointCount = document.getElementById('hitboxPointCount');
+  const cursorOverlay = document.getElementById('cursorOverlay');
   const rigOverlay = document.getElementById('rigOverlay');
   const rigAngleInput = document.getElementById('rigAngle');
   const applyRigButton = document.getElementById('applyRigButton');
   const resetRigButton = document.getElementById('resetRigButton');
+  const addPivotButton = document.getElementById('addPivotButton');
+  const pivotsList = document.getElementById('pivotsList');
 
   const palettes = [
     {
@@ -93,6 +96,7 @@
     layers: [],
     activeLayerId: undefined,
     nextLayerId: 1,
+    nextPivotId: 1,
     guideSize: 1,
     assetProfile: undefined,
     pendingCollisionPoints: undefined,
@@ -106,14 +110,19 @@
   };
 
   function setTool(tool) {
+    const leavingRig = state.tool === 'rig' && tool !== 'rig';
     state.tool = tool;
     for (const button of toolButtons) {
       button.classList.toggle('active', button.dataset.tool === tool);
     }
     canvas.style.cursor = tool === 'picker' ? 'copy' : 'crosshair';
     const layer = getActiveLayer();
+    if (leavingRig && bakeRigRotation(layer)) {
+      commit('Apply rig rotation');
+    }
     if (tool === 'rig' && layer) {
       updateRigAngleInput(layer);
+      renderPivotsPanel();
     }
     renderRigOverlay();
   }
@@ -176,6 +185,8 @@
       layerCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0);
     }
 
+    const defaultPivot = createPivot(layerCanvas.width / 2, layerCanvas.height / 2);
+
     return {
       id: `layer-${state.nextLayerId++}`,
       name,
@@ -183,10 +194,23 @@
       opacity: 1,
       canvas: layerCanvas,
       rig: {
-        pivot: { x: layerCanvas.width / 2, y: layerCanvas.height / 2 },
-        angle: 0
+        pivots: [defaultPivot],
+        activePivotId: defaultPivot.id
       }
     };
+  }
+
+  function createPivot(x, y, name) {
+    const id = `pivot-${state.nextPivotId++}`;
+    return { id, name: name || `Pivot ${state.nextPivotId - 1}`, x, y, angle: 0 };
+  }
+
+  function getActivePivot(layer) {
+    const target = layer ?? getActiveLayer();
+    if (!target) {
+      return undefined;
+    }
+    return target.rig.pivots.find((pivot) => pivot.id === target.rig.activePivotId) ?? target.rig.pivots[0];
   }
 
   function getActiveLayer() {
@@ -205,6 +229,7 @@
     if (state.tool === 'rig' && layer) {
       updateRigAngleInput(layer);
     }
+    renderPivotsPanel();
     renderRigOverlay();
   }
 
@@ -225,19 +250,41 @@
 
       ctx.save();
       ctx.globalAlpha = layer.opacity;
-      if (layer.rig.angle) {
-        ctx.translate(layer.rig.pivot.x, layer.rig.pivot.y);
-        ctx.rotate(layer.rig.angle);
-        ctx.translate(-layer.rig.pivot.x, -layer.rig.pivot.y);
+      for (const pivot of layer.rig.pivots) {
+        if (pivot.angle) {
+          ctx.translate(pivot.x, pivot.y);
+          ctx.rotate(pivot.angle);
+          ctx.translate(-pivot.x, -pivot.y);
+        }
       }
       ctx.drawImage(layer.canvas, 0, 0);
       ctx.restore();
     }
   }
 
+  function loadImageElement(dataUri) {
+    return new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.src = dataUri;
+    });
+  }
+
+  function finishLoad(filename) {
+    fileStatus.textContent = filename || 'pixel.png';
+    state.ready = true;
+    state.collision.points = flatToHitboxPoints(state.pendingCollisionPoints, canvas.width, canvas.height);
+    state.collision.draggingIndex = -1;
+    state.pendingCollisionPoints = undefined;
+    renderLayersPanel();
+    renderComposite();
+    renderHitboxOverlay();
+    renderPivotsPanel();
+    renderRigOverlay();
+  }
+
   function loadImage(dataUri, filename) {
-    const image = new Image();
-    image.onload = () => {
+    loadImageElement(dataUri).then((image) => {
       setCanvasSize(image.naturalWidth, image.naturalHeight);
       fitZoomToWorkspace();
       const baseCanvas = createLayerCanvas(canvas.width, canvas.height);
@@ -245,17 +292,44 @@
 
       state.layers = [createLayer('Layer 1', baseCanvas)];
       state.activeLayerId = state.layers[0].id;
-      fileStatus.textContent = filename || 'pixel.png';
-      state.ready = true;
-      state.collision.points = flatToHitboxPoints(state.pendingCollisionPoints, canvas.width, canvas.height);
-      state.collision.draggingIndex = -1;
-      state.pendingCollisionPoints = undefined;
-      renderLayersPanel();
-      renderComposite();
-      renderHitboxOverlay();
-      renderRigOverlay();
-    };
-    image.src = dataUri;
+      finishLoad(filename);
+    });
+  }
+
+  async function loadLayerState(layerState, filename) {
+    if (!layerState || !Array.isArray(layerState.layers) || layerState.layers.length === 0) {
+      return false;
+    }
+
+    const images = await Promise.all(layerState.layers.map((entry) => loadImageElement(entry.dataUri)));
+    setCanvasSize(images[0].naturalWidth, images[0].naturalHeight);
+    fitZoomToWorkspace();
+
+    state.layers = layerState.layers.map((entry, index) => {
+      const layerCanvas = createLayerCanvas(canvas.width, canvas.height);
+      layerCanvas.getContext('2d').drawImage(images[index], 0, 0);
+      const pivots = entry.rig.pivots.map((pivot) => ({
+        id: pivot.id,
+        name: pivot.name,
+        x: pivot.x,
+        y: pivot.y,
+        angle: pivot.angle
+      }));
+      return {
+        id: entry.id,
+        name: entry.name,
+        visible: entry.visible,
+        opacity: entry.opacity,
+        canvas: layerCanvas,
+        rig: {
+          pivots,
+          activePivotId: entry.rig.activePivotId
+        }
+      };
+    });
+    state.activeLayerId = state.layers[state.layers.length - 1].id;
+    finishLoad(filename);
+    return true;
   }
 
   function flatToHitboxPoints(flat, width, height) {
@@ -360,12 +434,101 @@
     return Math.max(canvas.width, canvas.height) / 4;
   }
 
-  function rigHandlePosition(layer) {
+  function rigHandlePosition(pivot) {
     const distance = rigHandleDistance();
     return {
-      x: layer.rig.pivot.x + Math.cos(layer.rig.angle - Math.PI / 2) * distance,
-      y: layer.rig.pivot.y + Math.sin(layer.rig.angle - Math.PI / 2) * distance
+      x: pivot.x + Math.cos(pivot.angle - Math.PI / 2) * distance,
+      y: pivot.y + Math.sin(pivot.angle - Math.PI / 2) * distance
     };
+  }
+
+  function renderPivotsPanel() {
+    if (!pivotsList) {
+      return;
+    }
+
+    pivotsList.replaceChildren();
+    const layer = getActiveLayer();
+    if (!layer) {
+      return;
+    }
+
+    for (const pivot of layer.rig.pivots) {
+      const item = document.createElement('div');
+      item.className = 'pivot-item';
+      item.classList.toggle('active', pivot.id === layer.rig.activePivotId);
+      item.dataset.pivotId = pivot.id;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'pivot-name';
+      nameSpan.textContent = pivot.name;
+      item.append(nameSpan);
+
+      if (layer.rig.pivots.length > 1) {
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'icon-button pivot-delete';
+        deleteButton.title = 'Delete pivot';
+        deleteButton.setAttribute('aria-label', 'Delete pivot');
+        deleteButton.textContent = '×';
+        deleteButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          deletePivot(pivot.id);
+        });
+        item.append(deleteButton);
+      }
+
+      item.addEventListener('click', () => setActivePivot(pivot.id));
+      pivotsList.append(item);
+    }
+  }
+
+  function setActivePivot(pivotId) {
+    const layer = getActiveLayer();
+    if (!layer || !layer.rig.pivots.some((pivot) => pivot.id === pivotId)) {
+      return;
+    }
+
+    layer.rig.activePivotId = pivotId;
+    updateRigAngleInput(layer);
+    renderPivotsPanel();
+    renderRigOverlay();
+  }
+
+  function addPivot() {
+    const layer = getActiveLayer();
+    if (!layer) {
+      return;
+    }
+
+    const pivot = createPivot(canvas.width / 2, canvas.height / 2);
+    layer.rig.pivots.push(pivot);
+    layer.rig.activePivotId = pivot.id;
+    updateRigAngleInput(layer);
+    renderPivotsPanel();
+    renderRigOverlay();
+  }
+
+  function deletePivot(pivotId) {
+    const layer = getActiveLayer();
+    if (!layer || layer.rig.pivots.length <= 1) {
+      return;
+    }
+
+    const index = layer.rig.pivots.findIndex((pivot) => pivot.id === pivotId);
+    if (index < 0) {
+      return;
+    }
+
+    layer.rig.pivots.splice(index, 1);
+    if (layer.rig.activePivotId === pivotId) {
+      layer.rig.activePivotId = layer.rig.pivots[Math.max(0, index - 1)].id;
+    }
+
+    updateRigAngleInput(layer);
+    renderComposite();
+    renderPivotsPanel();
+    renderRigOverlay();
   }
 
   function renderRigOverlay() {
@@ -385,70 +548,86 @@
       return;
     }
 
-    const handle = rigHandlePosition(layer);
     const pivotRadius = Math.max(0.75, 6 / state.zoom);
     const handleRadius = Math.max(0.5, 4 / state.zoom);
 
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', String(layer.rig.pivot.x));
-    line.setAttribute('y1', String(layer.rig.pivot.y));
-    line.setAttribute('x2', String(handle.x));
-    line.setAttribute('y2', String(handle.y));
-    line.setAttribute('class', 'rig-line');
-    rigOverlay.append(line);
+    for (const pivot of layer.rig.pivots) {
+      const isActive = pivot.id === layer.rig.activePivotId;
+      const handle = rigHandlePosition(pivot);
 
-    const pivotPoint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    pivotPoint.setAttribute('cx', String(layer.rig.pivot.x));
-    pivotPoint.setAttribute('cy', String(layer.rig.pivot.y));
-    pivotPoint.setAttribute('r', String(pivotRadius));
-    pivotPoint.setAttribute('class', 'rig-pivot');
-    rigOverlay.append(pivotPoint);
+      if (isActive) {
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', String(pivot.x));
+        line.setAttribute('y1', String(pivot.y));
+        line.setAttribute('x2', String(handle.x));
+        line.setAttribute('y2', String(handle.y));
+        line.setAttribute('class', 'rig-line');
+        rigOverlay.append(line);
 
-    const handlePoint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    handlePoint.setAttribute('cx', String(handle.x));
-    handlePoint.setAttribute('cy', String(handle.y));
-    handlePoint.setAttribute('r', String(handleRadius));
-    handlePoint.setAttribute('class', 'rig-handle');
-    rigOverlay.append(handlePoint);
+        const handlePoint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        handlePoint.setAttribute('cx', String(handle.x));
+        handlePoint.setAttribute('cy', String(handle.y));
+        handlePoint.setAttribute('r', String(handleRadius));
+        handlePoint.setAttribute('class', 'rig-handle');
+        rigOverlay.append(handlePoint);
+      }
+
+      const pivotPoint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      pivotPoint.setAttribute('cx', String(pivot.x));
+      pivotPoint.setAttribute('cy', String(pivot.y));
+      pivotPoint.setAttribute('r', String(pivotRadius));
+      pivotPoint.setAttribute('class', isActive ? 'rig-pivot' : 'rig-pivot inactive');
+      rigOverlay.append(pivotPoint);
+    }
   }
 
   function updateRigAngleInput(layer) {
-    const degrees = Math.round((layer.rig.angle * 180) / Math.PI);
+    const pivot = getActivePivot(layer);
+    const degrees = pivot ? Math.round((pivot.angle * 180) / Math.PI) : 0;
     rigAngleInput.value = String(degrees);
   }
 
   function setRigAngleFromInput() {
     const layer = getActiveLayer();
-    if (!layer) {
+    const pivot = getActivePivot(layer);
+    if (!layer || !pivot) {
       return;
     }
 
     const degrees = Number(rigAngleInput.value) || 0;
-    layer.rig.angle = (degrees * Math.PI) / 180;
+    pivot.angle = (degrees * Math.PI) / 180;
     renderComposite();
     renderRigOverlay();
   }
 
   function handleRigPointerDown(x, y) {
     const layer = getActiveLayer();
-    if (!layer) {
+    const pivot = getActivePivot(layer);
+    if (!layer || !pivot) {
       return;
     }
 
     const threshold = 10 / state.zoom;
-    const handle = rigHandlePosition(layer);
+    const handle = rigHandlePosition(pivot);
     const distanceToHandle = Math.hypot(handle.x - x, handle.y - y);
-    const distanceToPivot = Math.hypot(layer.rig.pivot.x - x, layer.rig.pivot.y - y);
+    const distanceToPivot = Math.hypot(pivot.x - x, pivot.y - y);
+
+    const otherPivot = layer.rig.pivots.find(
+      (candidate) => candidate.id !== pivot.id && Math.hypot(candidate.x - x, candidate.y - y) <= threshold
+    );
 
     if (distanceToHandle <= threshold) {
       state.rig.dragMode = 'rotate';
     } else if (distanceToPivot <= threshold) {
       state.rig.dragMode = 'pivot';
+    } else if (otherPivot) {
+      setActivePivot(otherPivot.id);
+      return;
     } else {
       state.rig.dragMode = 'rotate';
-      const dx = x - layer.rig.pivot.x;
-      const dy = y - layer.rig.pivot.y;
-      layer.rig.angle = Math.atan2(dy, dx) + Math.PI / 2;
+      const dx = x - pivot.x;
+      const dy = y - pivot.y;
+      pivot.angle = Math.atan2(dy, dx) + Math.PI / 2;
       updateRigAngleInput(layer);
       renderComposite();
     }
@@ -462,16 +641,18 @@
     }
 
     const layer = getActiveLayer();
-    if (!layer) {
+    const pivot = getActivePivot(layer);
+    if (!layer || !pivot) {
       return;
     }
 
     if (state.rig.dragMode === 'pivot') {
-      layer.rig.pivot = { x, y };
+      pivot.x = x;
+      pivot.y = y;
     } else if (state.rig.dragMode === 'rotate') {
-      const dx = x - layer.rig.pivot.x;
-      const dy = y - layer.rig.pivot.y;
-      layer.rig.angle = Math.atan2(dy, dx) + Math.PI / 2;
+      const dx = x - pivot.x;
+      const dy = y - pivot.y;
+      pivot.angle = Math.atan2(dy, dx) + Math.PI / 2;
       updateRigAngleInput(layer);
     }
 
@@ -479,36 +660,52 @@
     renderRigOverlay();
   }
 
-  function applyRigRotation() {
-    const layer = getActiveLayer();
-    if (!layer || !layer.rig.angle) {
-      return;
+  function bakeRigRotation(layer) {
+    if (!layer || !layer.rig.pivots.some((pivot) => pivot.angle)) {
+      return false;
     }
 
     const rotated = createLayerCanvas(canvas.width, canvas.height);
     const rotatedCtx = rotated.getContext('2d');
     rotatedCtx.imageSmoothingEnabled = false;
-    rotatedCtx.translate(layer.rig.pivot.x, layer.rig.pivot.y);
-    rotatedCtx.rotate(layer.rig.angle);
-    rotatedCtx.translate(-layer.rig.pivot.x, -layer.rig.pivot.y);
+    for (const pivot of layer.rig.pivots) {
+      if (pivot.angle) {
+        rotatedCtx.translate(pivot.x, pivot.y);
+        rotatedCtx.rotate(pivot.angle);
+        rotatedCtx.translate(-pivot.x, -pivot.y);
+      }
+    }
     rotatedCtx.drawImage(layer.canvas, 0, 0);
 
     layer.canvas = rotated;
-    layer.rig.angle = 0;
+    for (const pivot of layer.rig.pivots) {
+      pivot.angle = 0;
+    }
     updateRigAngleInput(layer);
     renderComposite();
     renderRigOverlay();
+    return true;
+  }
+
+  function applyRigRotation() {
+    const layer = getActiveLayer();
+    if (!bakeRigRotation(layer)) {
+      return;
+    }
+
     commit('Apply rig rotation');
   }
 
   function resetRig() {
     const layer = getActiveLayer();
-    if (!layer) {
+    const pivot = getActivePivot(layer);
+    if (!layer || !pivot) {
       return;
     }
 
-    layer.rig.pivot = { x: canvas.width / 2, y: canvas.height / 2 };
-    layer.rig.angle = 0;
+    pivot.x = canvas.width / 2;
+    pivot.y = canvas.height / 2;
+    pivot.angle = 0;
     updateRigAngleInput(layer);
     renderComposite();
     renderRigOverlay();
@@ -612,6 +809,30 @@
       x: Math.max(0, Math.min(canvas.width - 1, x)),
       y: Math.max(0, Math.min(canvas.height - 1, y))
     };
+  }
+
+  function hideCursorOverlay() {
+    cursorOverlay.hidden = true;
+  }
+
+  function updateCursorOverlay(x, y) {
+    if (state.tool === 'hitbox' || state.tool === 'rig') {
+      hideCursorOverlay();
+      return;
+    }
+
+    const size = state.tool === 'picker' || state.tool === 'fill' ? 1 : Number(brushSizeInput.value) || 1;
+    const half = Math.floor(size / 2);
+    const left = Math.max(0, x - half);
+    const top = Math.max(0, y - half);
+    const width = Math.min(size, canvas.width - left);
+    const height = Math.min(size, canvas.height - top);
+
+    cursorOverlay.style.left = `${left * state.zoom}px`;
+    cursorOverlay.style.top = `${top * state.zoom}px`;
+    cursorOverlay.style.width = `${width * state.zoom}px`;
+    cursorOverlay.style.height = `${height * state.zoom}px`;
+    cursorOverlay.hidden = false;
   }
 
   function hexToRgb(hex) {
@@ -728,6 +949,28 @@
     renderComposite();
   }
 
+  function serializeLayerState() {
+    return {
+      layers: state.layers.map((layer) => ({
+        id: layer.id,
+        name: layer.name,
+        visible: layer.visible,
+        opacity: layer.opacity,
+        dataUri: layer.canvas.toDataURL('image/png'),
+        rig: {
+          activePivotId: layer.rig.activePivotId,
+          pivots: layer.rig.pivots.map((pivot) => ({
+            id: pivot.id,
+            name: pivot.name,
+            x: pivot.x,
+            y: pivot.y,
+            angle: pivot.angle
+          }))
+        }
+      }))
+    };
+  }
+
   function commit(label) {
     if (!state.ready) {
       return;
@@ -737,7 +980,8 @@
     vscode.postMessage({
       type: 'edit',
       label,
-      dataUri: canvas.toDataURL('image/png')
+      dataUri: canvas.toDataURL('image/png'),
+      layerState: serializeLayerState()
     });
   }
 
@@ -777,6 +1021,9 @@
   }
 
   function handlePointerMove(event) {
+    const { x, y } = eventToPixel(event);
+    updateCursorOverlay(x, y);
+
     if (event.pointerId !== state.pointerId) {
       return;
     }
@@ -787,7 +1034,6 @@
     }
 
     if (state.tool === 'rig') {
-      const { x, y } = eventToPixel(event);
       handleRigPointerMove(x, y);
       return;
     }
@@ -796,7 +1042,6 @@
       return;
     }
 
-    const { x, y } = eventToPixel(event);
     const key = `${x}:${y}`;
     if (key === state.lastKey) {
       return;
@@ -859,6 +1104,8 @@
     state.activeLayerId = layer.id;
     renderLayersPanel();
     renderComposite();
+    renderPivotsPanel();
+    renderRigOverlay();
     commit('Add layer');
   }
 
@@ -874,6 +1121,8 @@
     state.activeLayerId = layer.id;
     renderLayersPanel();
     renderComposite();
+    renderPivotsPanel();
+    renderRigOverlay();
     commit('Duplicate layer');
   }
 
@@ -891,6 +1140,8 @@
     state.activeLayerId = state.layers[Math.max(0, index - 1)].id;
     renderLayersPanel();
     renderComposite();
+    renderPivotsPanel();
+    renderRigOverlay();
     commit('Delete layer');
   }
 
@@ -1078,12 +1329,16 @@
   rigAngleInput.addEventListener('change', setRigAngleFromInput);
   applyRigButton.addEventListener('click', applyRigRotation);
   resetRigButton.addEventListener('click', resetRig);
+  addPivotButton.addEventListener('click', addPivot);
 
   canvas.addEventListener('pointerdown', handlePointerDown);
   canvas.addEventListener('pointermove', handlePointerMove);
   canvas.addEventListener('pointerup', stopDrawing);
   canvas.addEventListener('pointercancel', stopDrawing);
-  canvas.addEventListener('pointerleave', stopDrawing);
+  canvas.addEventListener('pointerleave', (event) => {
+    stopDrawing(event);
+    hideCursorOverlay();
+  });
   canvas.addEventListener('contextmenu', (event) => {
     if (state.tool !== 'hitbox') {
       return;
@@ -1102,7 +1357,11 @@
       if (message.assetProfile?.kind === 'lpc-action') {
         setGuideSize(message.assetProfile.guideSize);
       }
-      loadImage(message.dataUri, message.filename);
+      loadLayerState(message.layerState, message.filename).then((loaded) => {
+        if (!loaded) {
+          loadImage(message.dataUri, message.filename);
+        }
+      });
     }
   });
 

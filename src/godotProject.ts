@@ -68,15 +68,6 @@ export async function runGodotMapExporter(
   await runGodotExporter(context, projectRoot, 'godot_map_exporter.gd', inputPath, outputResourcePath, 'map');
 }
 
-export async function runGodotHudExporter(
-  context: vscode.ExtensionContext,
-  projectRoot: string,
-  inputPath: string,
-  outputResourcePath: string
-): Promise<void> {
-  await runGodotExporter(context, projectRoot, 'godot_hud_exporter.gd', inputPath, outputResourcePath, 'HUD');
-}
-
 async function runGodotExporter(
   context: vscode.ExtensionContext,
   projectRoot: string,

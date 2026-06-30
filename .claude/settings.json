@@ -20,7 +20,15 @@
       "Bash(disown)",
       "Bash(DISPLAY=:0 gnome-screenshot -f /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/62ac495e-957a-4ac4-a83c-13a3e54551a2/scratchpad/rig-test/screen1.png)",
       "Bash(DISPLAY=:0 import -window root /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/62ac495e-957a-4ac4-a83c-13a3e54551a2/scratchpad/rig-test/screen1.png)",
-      "Bash(pkill -f \"rig-test\")"
+      "Bash(pkill -f \"rig-test\")",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(npx --yes playwright --version)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(npx playwright *)",
+      "Bash(node test.mjs)",
+      "Bash(node -e \"require\\('canvas'\\)\")"
     ]
   }
 }

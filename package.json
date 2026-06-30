@@ -18,11 +18,8 @@
   "activationEvents": [
     "onCustomEditor:pixelVscode.pixelEditor",
     "onCustomEditor:pixelVscode.mapEditor",
-    "onCustomEditor:pixelVscode.hudEditor",
-    "onCustomEditor:pixelVscode.tscnPreview",
     "onCommand:pixelVscode.newFile",
     "onCommand:pixelVscode.newGodotMap",
-    "onCommand:pixelVscode.newPixelMonsterHud",
     "onCommand:pixelVscode.newPixelMonsterCharacter",
     "onCommand:pixelVscode.openEditor",
     "onCommand:pixelVscode.previewAnimation",
@@ -48,20 +45,12 @@
         "title": "Pixel: New Pixel Monster Map"
       },
       {
-        "command": "pixelVscode.newPixelMonsterHud",
-        "title": "Pixel: New Pixel Monster HUD"
-      },
-      {
         "command": "pixelVscode.newPixelMonsterCharacter",
         "title": "Pixel: New Pixel Monster Character"
       },
       {
         "command": "pixelVscode.syncPixelMonsterCharacter",
         "title": "Pixel: Validate and Sync Character Pack"
-      },
-      {
-        "command": "pixelVscode.previewTscn",
-        "title": "Pixel: Preview Scene (.tscn)"
       }
     ],
     "configuration": {
@@ -90,11 +79,6 @@
           "command": "pixelVscode.syncPixelMonsterCharacter",
           "when": "resourceExtname == .png",
           "group": "navigation@3"
-        },
-        {
-          "command": "pixelVscode.previewTscn",
-          "when": "resourceExtname == .tscn",
-          "group": "navigation"
         }
       ],
       "editor/title/context": [
@@ -107,11 +91,6 @@
           "command": "pixelVscode.previewAnimation",
           "when": "resourceExtname == .png",
           "group": "navigation@2"
-        },
-        {
-          "command": "pixelVscode.previewTscn",
-          "when": "resourceExtname == .tscn",
-          "group": "navigation"
         }
       ]
     },
@@ -135,26 +114,6 @@
           }
         ],
         "priority": "default"
-      },
-      {
-        "viewType": "pixelVscode.hudEditor",
-        "displayName": "Pixel Monster HUD Editor",
-        "selector": [
-          {
-            "filenamePattern": "*.pixelhud.json"
-          }
-        ],
-        "priority": "default"
-      },
-      {
-        "viewType": "pixelVscode.tscnPreview",
-        "displayName": "Pixel Scene Preview",
-        "selector": [
-          {
-            "filenamePattern": "*.tscn"
-          }
-        ],
-        "priority": "option"
       }
     ]
   },
