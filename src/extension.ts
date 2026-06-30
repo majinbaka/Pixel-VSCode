@@ -558,7 +558,6 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
         <input id="rigAngle" class="number-input" type="number" step="1" value="0" title="Rotation angle in degrees">
         <button id="addPivotButton" class="text-button" type="button" title="Add a new pivot point to the active layer">+ Pivot</button>
         <div id="pivotsList" class="pivots-list" aria-label="Pivot points"></div>
-        <button id="applyRigButton" class="text-button" type="button" title="Bake the current rotations into the active layer's pixels">Apply</button>
         <button id="resetRigButton" class="text-button" type="button" title="Reset rotation and position for the active pivot">Reset</button>
       </section>
 

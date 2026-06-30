@@ -38,7 +38,6 @@
   const cursorOverlay = document.getElementById('cursorOverlay');
   const rigOverlay = document.getElementById('rigOverlay');
   const rigAngleInput = document.getElementById('rigAngle');
-  const applyRigButton = document.getElementById('applyRigButton');
   const resetRigButton = document.getElementById('resetRigButton');
   const addPivotButton = document.getElementById('addPivotButton');
   const pivotsList = document.getElementById('pivotsList');
@@ -110,16 +109,12 @@
   };
 
   function setTool(tool) {
-    const leavingRig = state.tool === 'rig' && tool !== 'rig';
     state.tool = tool;
     for (const button of toolButtons) {
       button.classList.toggle('active', button.dataset.tool === tool);
     }
     canvas.style.cursor = tool === 'picker' ? 'copy' : 'crosshair';
     const layer = getActiveLayer();
-    if (leavingRig && bakeRigRotation(layer)) {
-      commit('Apply rig rotation');
-    }
     if (tool === 'rig' && layer) {
       updateRigAngleInput(layer);
       renderPivotsPanel();
@@ -296,6 +291,11 @@
     });
   }
 
+  function nextIdNumber(id) {
+    const match = /-(\d+)$/.exec(id ?? '');
+    return match ? Number(match[1]) : 0;
+  }
+
   async function loadLayerState(layerState, filename) {
     if (!layerState || !Array.isArray(layerState.layers) || layerState.layers.length === 0) {
       return false;
@@ -305,16 +305,23 @@
     setCanvasSize(images[0].naturalWidth, images[0].naturalHeight);
     fitZoomToWorkspace();
 
+    let maxLayerId = 0;
+    let maxPivotId = 0;
+
     state.layers = layerState.layers.map((entry, index) => {
       const layerCanvas = createLayerCanvas(canvas.width, canvas.height);
       layerCanvas.getContext('2d').drawImage(images[index], 0, 0);
-      const pivots = entry.rig.pivots.map((pivot) => ({
-        id: pivot.id,
-        name: pivot.name,
-        x: pivot.x,
-        y: pivot.y,
-        angle: pivot.angle
-      }));
+      maxLayerId = Math.max(maxLayerId, nextIdNumber(entry.id));
+      const pivots = entry.rig.pivots.map((pivot) => {
+        maxPivotId = Math.max(maxPivotId, nextIdNumber(pivot.id));
+        return {
+          id: pivot.id,
+          name: pivot.name,
+          x: pivot.x,
+          y: pivot.y,
+          angle: pivot.angle
+        };
+      });
       return {
         id: entry.id,
         name: entry.name,
@@ -327,6 +334,8 @@
         }
       };
     });
+    state.nextLayerId = Math.max(state.nextLayerId, maxLayerId + 1);
+    state.nextPivotId = Math.max(state.nextPivotId, maxPivotId + 1);
     state.activeLayerId = state.layers[state.layers.length - 1].id;
     finishLoad(filename);
     return true;
@@ -598,6 +607,9 @@
     pivot.angle = (degrees * Math.PI) / 180;
     renderComposite();
     renderRigOverlay();
+    if (bakeRigRotation(layer)) {
+      commit('Rotate layer');
+    }
   }
 
   function handleRigPointerDown(x, y) {
@@ -668,6 +680,7 @@
     const rotated = createLayerCanvas(canvas.width, canvas.height);
     const rotatedCtx = rotated.getContext('2d');
     rotatedCtx.imageSmoothingEnabled = false;
+    rotatedCtx.save();
     for (const pivot of layer.rig.pivots) {
       if (pivot.angle) {
         rotatedCtx.translate(pivot.x, pivot.y);
@@ -676,6 +689,7 @@
       }
     }
     rotatedCtx.drawImage(layer.canvas, 0, 0);
+    rotatedCtx.restore();
 
     layer.canvas = rotated;
     for (const pivot of layer.rig.pivots) {
@@ -685,15 +699,6 @@
     renderComposite();
     renderRigOverlay();
     return true;
-  }
-
-  function applyRigRotation() {
-    const layer = getActiveLayer();
-    if (!bakeRigRotation(layer)) {
-      return;
-    }
-
-    commit('Apply rig rotation');
   }
 
   function resetRig() {
@@ -809,6 +814,41 @@
       x: Math.max(0, Math.min(canvas.width - 1, x)),
       y: Math.max(0, Math.min(canvas.height - 1, y))
     };
+  }
+
+  function unrotatePoint(x, y, pivot, angle) {
+    const cos = Math.cos(-angle);
+    const sin = Math.sin(-angle);
+    const dx = x - pivot.x;
+    const dy = y - pivot.y;
+    return {
+      x: pivot.x + (dx * cos - dy * sin),
+      y: pivot.y + (dx * sin + dy * cos)
+    };
+  }
+
+  function eventToLayerPixel(event, layer) {
+    const rect = canvas.getBoundingClientRect();
+    let x = ((event.clientX - rect.left) / rect.width) * canvas.width;
+    let y = ((event.clientY - rect.top) / rect.height) * canvas.height;
+
+    if (layer) {
+      const pivots = layer.rig.pivots;
+      for (let i = pivots.length - 1; i >= 0; i -= 1) {
+        const pivot = pivots[i];
+        if (pivot.angle) {
+          ({ x, y } = unrotatePoint(x, y, pivot, pivot.angle));
+        }
+      }
+    }
+
+    const px = Math.floor(x);
+    const py = Math.floor(y);
+    if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) {
+      return null;
+    }
+
+    return { x: px, y: py };
   }
 
   function hideCursorOverlay() {
@@ -990,24 +1030,31 @@
       return;
     }
 
-    const { x, y } = eventToPixel(event);
+    const screenPoint = eventToPixel(event);
     state.pointerId = event.pointerId;
     canvas.setPointerCapture(event.pointerId);
 
     if (state.tool === 'hitbox') {
-      handleHitboxPointerDown(event, x, y);
+      handleHitboxPointerDown(event, screenPoint.x, screenPoint.y);
       return;
     }
 
     if (state.tool === 'rig') {
-      handleRigPointerDown(x, y);
+      handleRigPointerDown(screenPoint.x, screenPoint.y);
       return;
     }
 
     if (state.tool === 'picker') {
-      pickColor(x, y);
+      pickColor(screenPoint.x, screenPoint.y);
       return;
     }
+
+    const layer = getActiveLayer();
+    const layerPoint = eventToLayerPixel(event, layer);
+    if (!layerPoint) {
+      return;
+    }
+    const { x, y } = layerPoint;
 
     if (state.tool === 'fill') {
       floodFill(x, y);
@@ -1021,8 +1068,13 @@
   }
 
   function handlePointerMove(event) {
-    const { x, y } = eventToPixel(event);
-    updateCursorOverlay(x, y);
+    const layer = getActiveLayer();
+    const layerPoint = eventToLayerPixel(event, layer);
+    if (layerPoint) {
+      updateCursorOverlay(layerPoint.x, layerPoint.y);
+    } else {
+      hideCursorOverlay();
+    }
 
     if (event.pointerId !== state.pointerId) {
       return;
@@ -1034,21 +1086,22 @@
     }
 
     if (state.tool === 'rig') {
-      handleRigPointerMove(x, y);
+      const screenPoint = eventToPixel(event);
+      handleRigPointerMove(screenPoint.x, screenPoint.y);
       return;
     }
 
-    if (!state.drawing) {
+    if (!state.drawing || !layerPoint) {
       return;
     }
 
-    const key = `${x}:${y}`;
+    const key = `${layerPoint.x}:${layerPoint.y}`;
     if (key === state.lastKey) {
       return;
     }
 
     state.lastKey = key;
-    drawAt(x, y);
+    drawAt(layerPoint.x, layerPoint.y);
   }
 
   function stopDrawing(event) {
@@ -1063,8 +1116,15 @@
     }
 
     if (state.tool === 'rig') {
+      const wasDragging = Boolean(state.rig.dragMode);
       state.rig.dragMode = undefined;
       state.pointerId = undefined;
+      if (wasDragging) {
+        const layer = getActiveLayer();
+        if (bakeRigRotation(layer)) {
+          commit('Rotate layer');
+        }
+      }
       return;
     }
 
@@ -1327,7 +1387,6 @@
   });
 
   rigAngleInput.addEventListener('change', setRigAngleFromInput);
-  applyRigButton.addEventListener('click', applyRigRotation);
   resetRigButton.addEventListener('click', resetRig);
   addPivotButton.addEventListener('click', addPivot);
 

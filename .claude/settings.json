@@ -28,7 +28,25 @@
       "Bash(npm install *)",
       "Bash(npx playwright *)",
       "Bash(node test.mjs)",
-      "Bash(node -e \"require\\('canvas'\\)\")"
+      "Bash(node -e \"require\\('canvas'\\)\")",
+      "Bash(npm view *)",
+      "Bash(node /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/3ee9b2d0-1dca-4bd5-9ef9-11a0f1655a70/scratchpad/test_rotation.js)",
+      "Bash(node /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/3ee9b2d0-1dca-4bd5-9ef9-11a0f1655a70/scratchpad/test_bake_shift.js)",
+      "Bash(node debug_real.js)",
+      "Bash(node test_many_points.js)",
+      "Bash(node test_fix_attempt.js)",
+      "Bash(node test_center_sample.js)",
+      "Bash(node debug_find_mismatch.js)",
+      "Bash(node test_center_only.js)",
+      "Bash(node test_fix_no_clamp.js)",
+      "Bash(node debug_remaining.js)",
+      "Bash(node full_flow_test.js)",
+      "Bash(node test_ctx_state_leak.js)",
+      "Bash(node full_flow_v2.js)",
+      "Bash(cd /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/3ee9b2d0-1dca-4bd5-9ef9-11a0f1655a70/scratchpad && rm -f *.js *.png package*.json && rm -rf node_modules && echo \"cleaned\")"
+    ],
+    "additionalDirectories": [
+      "/home/anhnv/Code/pixel-vscode"
     ]
   }
 }
