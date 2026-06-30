@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node test-layout.js)",
+      "Bash(node --check media/tscn-preview.js)",
+      "Bash(find /home/anhnv/Code/pixel-monster -maxdepth 1 -iname \"project.godot\")",
+      "Read(//home/anhnv/Code/pixel-monster/**)",
+      "Bash(node --check /home/anhnv/Code/pixel-vscode/media/tscn-preview.js)",
+      "Bash(code --list-extensions)",
+      "Read(//home/anhnv/.vscode/extensions/**)",
+      "Read(//home/anhnv/**)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}

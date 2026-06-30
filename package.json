@@ -2,7 +2,7 @@
   "name": "pixel-vscode",
   "displayName": "Pixel VSCode",
   "description": "Create and edit pixel art PNG files directly in VS Code.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "majinbaka",
   "license": "MIT",
   "repository": {
@@ -17,9 +17,16 @@
   ],
   "activationEvents": [
     "onCustomEditor:pixelVscode.pixelEditor",
+    "onCustomEditor:pixelVscode.mapEditor",
+    "onCustomEditor:pixelVscode.hudEditor",
+    "onCustomEditor:pixelVscode.tscnPreview",
     "onCommand:pixelVscode.newFile",
+    "onCommand:pixelVscode.newGodotMap",
+    "onCommand:pixelVscode.newPixelMonsterHud",
+    "onCommand:pixelVscode.newPixelMonsterCharacter",
     "onCommand:pixelVscode.openEditor",
-    "onCommand:pixelVscode.previewAnimation"
+    "onCommand:pixelVscode.previewAnimation",
+    "onCommand:pixelVscode.syncPixelMonsterCharacter"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -35,8 +42,38 @@
       {
         "command": "pixelVscode.previewAnimation",
         "title": "Pixel: Preview PNG Animation"
+      },
+      {
+        "command": "pixelVscode.newGodotMap",
+        "title": "Pixel: New Pixel Monster Map"
+      },
+      {
+        "command": "pixelVscode.newPixelMonsterHud",
+        "title": "Pixel: New Pixel Monster HUD"
+      },
+      {
+        "command": "pixelVscode.newPixelMonsterCharacter",
+        "title": "Pixel: New Pixel Monster Character"
+      },
+      {
+        "command": "pixelVscode.syncPixelMonsterCharacter",
+        "title": "Pixel: Validate and Sync Character Pack"
+      },
+      {
+        "command": "pixelVscode.previewTscn",
+        "title": "Pixel: Preview Scene (.tscn)"
       }
     ],
+    "configuration": {
+      "title": "Pixel VSCode",
+      "properties": {
+        "pixelVscode.godotExecutable": {
+          "type": "string",
+          "default": "godot",
+          "description": "Godot executable used to export native map scenes."
+        }
+      }
+    },
     "menus": {
       "explorer/context": [
         {
@@ -48,6 +85,16 @@
           "command": "pixelVscode.previewAnimation",
           "when": "resourceExtname == .png",
           "group": "navigation@2"
+        },
+        {
+          "command": "pixelVscode.syncPixelMonsterCharacter",
+          "when": "resourceExtname == .png",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pixelVscode.previewTscn",
+          "when": "resourceExtname == .tscn",
+          "group": "navigation"
         }
       ],
       "editor/title/context": [
@@ -60,6 +107,11 @@
           "command": "pixelVscode.previewAnimation",
           "when": "resourceExtname == .png",
           "group": "navigation@2"
+        },
+        {
+          "command": "pixelVscode.previewTscn",
+          "when": "resourceExtname == .tscn",
+          "group": "navigation"
         }
       ]
     },
@@ -70,6 +122,36 @@
         "selector": [
           {
             "filenamePattern": "*.png"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "pixelVscode.mapEditor",
+        "displayName": "Pixel Monster Map Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.pixelmap.json"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "pixelVscode.hudEditor",
+        "displayName": "Pixel Monster HUD Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.pixelhud.json"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "pixelVscode.tscnPreview",
+        "displayName": "Pixel Scene Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.tscn"
           }
         ],
         "priority": "option"

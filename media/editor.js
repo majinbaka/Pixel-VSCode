@@ -10,10 +10,12 @@
   const brushSizeLabel = document.getElementById('brushSizeLabel');
   const zoomInput = document.getElementById('zoom');
   const zoomLabel = document.getElementById('zoomLabel');
+  const guideSizeSelect = document.getElementById('guideSize');
   const widthInput = document.getElementById('widthInput');
   const heightInput = document.getElementById('heightInput');
   const resizeButton = document.getElementById('resizeButton');
   const saveButton = document.getElementById('saveButton');
+  const syncCharacterButton = document.getElementById('syncCharacterButton');
   const toggleGridButton = document.getElementById('toggleGrid');
   const paletteSelect = document.getElementById('paletteSelect');
   const paletteSwatches = document.getElementById('paletteSwatches');
@@ -26,6 +28,11 @@
   const layerOpacityInput = document.getElementById('layerOpacity');
   const layerOpacityLabel = document.getElementById('layerOpacityLabel');
   const toolButtons = Array.from(document.querySelectorAll('[data-tool]'));
+  const hitboxOverlay = document.getElementById('hitboxOverlay');
+  const autoTraceButton = document.getElementById('autoTraceButton');
+  const clearHitboxButton = document.getElementById('clearHitboxButton');
+  const saveHitboxButton = document.getElementById('saveHitboxButton');
+  const hitboxPointCount = document.getElementById('hitboxPointCount');
 
   const palettes = [
     {
@@ -79,7 +86,14 @@
     ready: false,
     layers: [],
     activeLayerId: undefined,
-    nextLayerId: 1
+    nextLayerId: 1,
+    guideSize: 1,
+    assetProfile: undefined,
+    pendingCollisionPoints: undefined,
+    collision: {
+      points: [],
+      draggingIndex: -1
+    }
   };
 
   function setTool(tool) {
@@ -94,14 +108,23 @@
     canvas.style.width = `${canvas.width * state.zoom}px`;
     canvas.style.height = `${canvas.height * state.zoom}px`;
     canvasFrame.style.setProperty('--pixel-size', `${state.zoom}px`);
+    canvasFrame.style.setProperty('--guide-size', `${state.zoom * state.guideSize}px`);
   }
 
   function setZoom(value) {
-    const zoom = Math.max(4, Math.min(40, Number(value) || 16));
+    const zoom = Math.max(1, Math.min(40, Number(value) || 16));
     state.zoom = zoom;
     zoomInput.value = String(zoom);
     zoomLabel.value = `${zoom}x`;
     updateCanvasDisplaySize();
+    renderHitboxOverlay();
+  }
+
+  function setGuideSize(value) {
+    const guideSize = Math.max(1, Math.min(128, Number(value) || 1));
+    state.guideSize = guideSize;
+    guideSizeSelect.value = String(guideSize);
+    canvasFrame.style.setProperty('--guide-size', `${state.zoom * guideSize}px`);
   }
 
   function setCanvasSize(width, height) {
@@ -149,7 +172,7 @@
   }
 
   function setBrushSize(value) {
-    const size = Math.max(1, Math.min(8, Number(value) || 1));
+    const size = Math.max(1, Math.min(64, Number(value) || 1));
     brushSizeInput.value = String(size);
     brushSizeLabel.value = String(size);
   }
@@ -180,10 +203,194 @@
       state.activeLayerId = state.layers[0].id;
       fileStatus.textContent = filename || 'pixel.png';
       state.ready = true;
+      state.collision.points = flatToHitboxPoints(state.pendingCollisionPoints, canvas.width, canvas.height);
+      state.collision.draggingIndex = -1;
+      state.pendingCollisionPoints = undefined;
       renderLayersPanel();
       renderComposite();
+      renderHitboxOverlay();
     };
     image.src = dataUri;
+  }
+
+  function flatToHitboxPoints(flat, width, height) {
+    if (!Array.isArray(flat) || flat.length < 6 || flat.length % 2 !== 0) {
+      return [];
+    }
+
+    const halfWidth = width / 2;
+    const halfHeight = height / 2;
+    const points = [];
+    for (let index = 0; index < flat.length; index += 2) {
+      points.push({ x: flat[index] + halfWidth, y: flat[index + 1] + halfHeight });
+    }
+    return points;
+  }
+
+  function flattenHitboxPoints() {
+    const halfWidth = canvas.width / 2;
+    const halfHeight = canvas.height / 2;
+    const flat = [];
+    for (const point of state.collision.points) {
+      flat.push(point.x - halfWidth, point.y - halfHeight);
+    }
+    return flat;
+  }
+
+  function hitboxPointThreshold() {
+    return 8 / state.zoom;
+  }
+
+  function findNearestHitboxPointIndex(x, y, threshold) {
+    let nearestIndex = -1;
+    let nearestDistance = Infinity;
+    state.collision.points.forEach((point, index) => {
+      const distance = Math.hypot(point.x - x, point.y - y);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+    return nearestDistance <= threshold ? nearestIndex : -1;
+  }
+
+  function handleHitboxPointerDown(event, x, y) {
+    const nearestIndex = findNearestHitboxPointIndex(x, y, hitboxPointThreshold());
+    if (nearestIndex >= 0) {
+      state.collision.draggingIndex = nearestIndex;
+    } else {
+      state.collision.points.push({ x, y });
+      state.collision.draggingIndex = state.collision.points.length - 1;
+    }
+    renderHitboxOverlay();
+  }
+
+  function handleHitboxPointerMove(event) {
+    if (state.collision.draggingIndex < 0) {
+      return;
+    }
+
+    const { x, y } = eventToPixel(event);
+    state.collision.points[state.collision.draggingIndex] = { x, y };
+    renderHitboxOverlay();
+  }
+
+  function deleteNearestHitboxPoint(x, y) {
+    const index = findNearestHitboxPointIndex(x, y, hitboxPointThreshold());
+    if (index >= 0) {
+      state.collision.points.splice(index, 1);
+      renderHitboxOverlay();
+    }
+  }
+
+  function renderHitboxOverlay() {
+    if (!state.ready) {
+      return;
+    }
+
+    hitboxOverlay.setAttribute('viewBox', `0 0 ${canvas.width} ${canvas.height}`);
+    hitboxOverlay.replaceChildren();
+    hitboxPointCount.textContent = String(state.collision.points.length);
+
+    const points = state.collision.points;
+    if (points.length >= 2) {
+      const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polygon.setAttribute('points', points.map((point) => `${point.x},${point.y}`).join(' '));
+      polygon.setAttribute('class', 'hitbox-polygon');
+      hitboxOverlay.append(polygon);
+    }
+
+    const radius = Math.max(0.5, 5 / state.zoom);
+    for (const point of points) {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', String(point.x));
+      circle.setAttribute('cy', String(point.y));
+      circle.setAttribute('r', String(radius));
+      circle.setAttribute('class', 'hitbox-point');
+      hitboxOverlay.append(circle);
+    }
+  }
+
+  function convexHull(rawPoints) {
+    const unique = Array.from(new Map(rawPoints.map((point) => [`${point.x}:${point.y}`, point])).values())
+      .sort((first, second) => (first.x === second.x ? first.y - second.y : first.x - second.x));
+    if (unique.length <= 2) {
+      return unique;
+    }
+
+    const cross = (origin, a, b) => (a.x - origin.x) * (b.y - origin.y) - (a.y - origin.y) * (b.x - origin.x);
+
+    const lower = [];
+    for (const point of unique) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+        lower.pop();
+      }
+      lower.push(point);
+    }
+
+    const upper = [];
+    for (let index = unique.length - 1; index >= 0; index -= 1) {
+      const point = unique[index];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+        upper.pop();
+      }
+      upper.push(point);
+    }
+
+    lower.pop();
+    upper.pop();
+    return lower.concat(upper);
+  }
+
+  function autoTraceHitbox() {
+    if (!state.ready) {
+      return;
+    }
+
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const alphaAt = (x, y) => image[(y * canvas.width + x) * 4 + 3];
+    const candidates = [];
+
+    for (let y = 0; y < canvas.height; y += 1) {
+      let left = -1;
+      let right = -1;
+      for (let x = 0; x < canvas.width; x += 1) {
+        if (alphaAt(x, y) > 8) {
+          if (left < 0) {
+            left = x;
+          }
+          right = x;
+        }
+      }
+      if (left >= 0) {
+        candidates.push({ x: left, y }, { x: right, y });
+      }
+    }
+
+    for (let x = 0; x < canvas.width; x += 1) {
+      let top = -1;
+      let bottom = -1;
+      for (let y = 0; y < canvas.height; y += 1) {
+        if (alphaAt(x, y) > 8) {
+          if (top < 0) {
+            top = y;
+          }
+          bottom = y;
+        }
+      }
+      if (top >= 0) {
+        candidates.push({ x, y: top }, { x, y: bottom });
+      }
+    }
+
+    const hull = convexHull(candidates);
+    if (hull.length < 3) {
+      return;
+    }
+
+    state.collision.points = hull;
+    state.collision.draggingIndex = -1;
+    renderHitboxOverlay();
   }
 
   function clampCanvasNumber(value, fallback) {
@@ -340,6 +547,11 @@
     state.pointerId = event.pointerId;
     canvas.setPointerCapture(event.pointerId);
 
+    if (state.tool === 'hitbox') {
+      handleHitboxPointerDown(event, x, y);
+      return;
+    }
+
     if (state.tool === 'picker') {
       pickColor(x, y);
       return;
@@ -357,7 +569,16 @@
   }
 
   function handlePointerMove(event) {
-    if (!state.drawing || event.pointerId !== state.pointerId) {
+    if (event.pointerId !== state.pointerId) {
+      return;
+    }
+
+    if (state.tool === 'hitbox') {
+      handleHitboxPointerMove(event);
+      return;
+    }
+
+    if (!state.drawing) {
       return;
     }
 
@@ -372,7 +593,17 @@
   }
 
   function stopDrawing(event) {
-    if (!state.drawing || event.pointerId !== state.pointerId) {
+    if (event.pointerId !== state.pointerId) {
+      return;
+    }
+
+    if (state.tool === 'hitbox') {
+      state.collision.draggingIndex = -1;
+      state.pointerId = undefined;
+      return;
+    }
+
+    if (!state.drawing) {
       return;
     }
 
@@ -394,7 +625,10 @@
     }
 
     setCanvasSize(width, height);
+    state.collision.points = [];
+    state.collision.draggingIndex = -1;
     renderComposite();
+    renderHitboxOverlay();
     commit('Resize canvas');
   }
 
@@ -591,8 +825,10 @@
 
   brushSizeInput.addEventListener('input', () => setBrushSize(brushSizeInput.value));
   zoomInput.addEventListener('input', () => setZoom(zoomInput.value));
+  guideSizeSelect.addEventListener('change', () => setGuideSize(guideSizeSelect.value));
   resizeButton.addEventListener('click', resizeCanvas);
   saveButton.addEventListener('click', () => vscode.postMessage({ type: 'save' }));
+  syncCharacterButton.addEventListener('click', () => vscode.postMessage({ type: 'syncCharacter' }));
   colorInput.addEventListener('input', renderPaletteSwatches);
   paletteSelect.addEventListener('change', renderPaletteSwatches);
   addLayerButton.addEventListener('click', addLayer);
@@ -607,15 +843,40 @@
     toggleGridButton.classList.toggle('active', canvasFrame.classList.contains('grid'));
   });
 
+  autoTraceButton.addEventListener('click', autoTraceHitbox);
+  clearHitboxButton.addEventListener('click', () => {
+    state.collision.points = [];
+    state.collision.draggingIndex = -1;
+    renderHitboxOverlay();
+  });
+  saveHitboxButton.addEventListener('click', () => {
+    vscode.postMessage({ type: 'saveCollision', points: flattenHitboxPoints() });
+  });
+
   canvas.addEventListener('pointerdown', handlePointerDown);
   canvas.addEventListener('pointermove', handlePointerMove);
   canvas.addEventListener('pointerup', stopDrawing);
   canvas.addEventListener('pointercancel', stopDrawing);
   canvas.addEventListener('pointerleave', stopDrawing);
+  canvas.addEventListener('contextmenu', (event) => {
+    if (state.tool !== 'hitbox') {
+      return;
+    }
+    event.preventDefault();
+    const { x, y } = eventToPixel(event);
+    deleteNearestHitboxPoint(x, y);
+  });
 
   window.addEventListener('message', (event) => {
     const message = event.data;
     if (message.type === 'init') {
+      state.assetProfile = message.assetProfile;
+      state.pendingCollisionPoints = message.collisionPoints;
+      syncCharacterButton.hidden = message.assetProfile?.kind !== 'lpc-action';
+      if (message.assetProfile?.kind === 'lpc-action') {
+        setGuideSize(message.assetProfile.guideSize);
+        setZoom(2);
+      }
       loadImage(message.dataUri, message.filename);
     }
   });
@@ -624,5 +885,6 @@
   setTool('pencil');
   setBrushSize(brushSizeInput.value);
   setZoom(zoomInput.value);
+  setGuideSize(guideSizeSelect.value);
   vscode.postMessage({ type: 'ready' });
 }());

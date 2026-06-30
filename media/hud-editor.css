@@ -1,0 +1,292 @@
+:root {
+  color-scheme: light dark;
+  --border: var(--vscode-panel-border);
+  --surface: var(--vscode-editor-background);
+  --raised: var(--vscode-sideBar-background);
+  --hover: var(--vscode-toolbar-hoverBackground);
+  --text: var(--vscode-foreground);
+  --muted: var(--vscode-descriptionForeground);
+  --accent: var(--vscode-button-background);
+  --accent-text: var(--vscode-button-foreground);
+  --focus: var(--vscode-focusBorder);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--surface);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.hud-app {
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+}
+
+.toolbar,
+.tool-group,
+.panel-header {
+  display: flex;
+  align-items: center;
+}
+
+.toolbar {
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--raised);
+}
+
+.tool-group {
+  gap: 7px;
+  min-width: max-content;
+  height: 36px;
+  padding-right: 10px;
+  border-right: 1px solid var(--border);
+}
+
+.tool-group:last-child {
+  border-right: 0;
+}
+
+.push {
+  margin-left: auto;
+}
+
+.button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.button:hover,
+.element-row:hover {
+  background: var(--hover);
+}
+
+.button.active,
+.element-row.active {
+  border-color: var(--focus);
+  background: color-mix(in srgb, var(--focus) 16%, transparent);
+}
+
+.button.primary {
+  color: var(--accent-text);
+  background: var(--accent);
+}
+
+.button.primary:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.status,
+label,
+output,
+small {
+  color: var(--muted);
+}
+
+.status {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+select,
+input[type="text"],
+input[type="number"] {
+  height: 28px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+}
+
+select {
+  color: var(--vscode-dropdown-foreground);
+  background: var(--vscode-dropdown-background);
+}
+
+input[type="range"] {
+  width: 110px;
+  accent-color: var(--accent);
+}
+
+input[type="color"] {
+  width: 42px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+}
+
+.content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: 0;
+}
+
+.workspace {
+  min-width: 0;
+  overflow: auto;
+  padding: 32px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.hud-frame {
+  width: max-content;
+  height: max-content;
+  margin: 0 auto;
+  background-color: #1b1f1f;
+  background-image:
+    linear-gradient(45deg, #222 25%, transparent 25%),
+    linear-gradient(-45deg, #222 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #222 75%),
+    linear-gradient(-45deg, transparent 75%, #222 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.hud-frame.grid {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--vscode-foreground) 16%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--vscode-foreground) 16%, transparent) 1px, transparent 1px),
+    linear-gradient(45deg, #222 25%, transparent 25%),
+    linear-gradient(-45deg, #222 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #222 75%),
+    linear-gradient(-45deg, transparent 75%, #222 75%);
+  background-size: 16px 16px, 16px 16px, 16px 16px, 16px 16px, 16px 16px, 16px 16px;
+}
+
+#hudCanvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: default;
+}
+
+.sidebar {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: var(--raised);
+}
+
+.panel {
+  min-height: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-header {
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+.inspector-panel {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.inspector-panel label {
+  display: grid;
+  gap: 4px;
+}
+
+.inspector-panel input[type="text"] {
+  width: 100%;
+  padding: 0 7px;
+}
+
+.rect-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rect-grid input {
+  width: 100%;
+  padding: 0 7px;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.layers-panel {
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr);
+}
+
+.elements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 0 12px 12px;
+  overflow: auto;
+}
+
+.element-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.element-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,29 +1,77 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { PNG } from 'pngjs';
+import { createPixelMonsterCharacter, syncPixelMonsterCharacter } from './characterAssets';
+import { deleteCollisionPolygon, readCollisionPolygon, writeCollisionPolygon } from './collisionShape';
+import { createGodotMap, MapEditorProvider } from './mapEditor';
+import { createPixelMonsterHud, HudEditorProvider } from './hudEditor';
+import { TscnPreviewProvider } from './tscnPreview';
 
 const VIEW_TYPE = 'pixelVscode.pixelEditor';
 const ANIMATION_VIEW_TYPE = 'pixelVscode.animationPreview';
 
 export function activate(context: vscode.ExtensionContext) {
   const provider = new PixelEditorProvider(context);
+  const mapProvider = new MapEditorProvider(context);
+  const hudProvider = new HudEditorProvider(context);
+  const tscnProvider = new TscnPreviewProvider(context);
 
   context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(TscnPreviewProvider.viewType, tscnProvider, {
+      supportsMultipleEditorsPerDocument: true,
+      webviewOptions: {
+        retainContextWhenHidden: true
+      }
+    }),
     vscode.window.registerCustomEditorProvider(VIEW_TYPE, provider, {
       supportsMultipleEditorsPerDocument: false,
       webviewOptions: {
         retainContextWhenHidden: true
       }
     }),
+    vscode.window.registerCustomEditorProvider(MapEditorProvider.viewType, mapProvider, {
+      supportsMultipleEditorsPerDocument: false,
+      webviewOptions: {
+        retainContextWhenHidden: true
+      }
+    }),
+    vscode.window.registerCustomEditorProvider(HudEditorProvider.viewType, hudProvider, {
+      supportsMultipleEditorsPerDocument: false,
+      webviewOptions: {
+        retainContextWhenHidden: true
+      }
+    }),
     vscode.commands.registerCommand('pixelVscode.newFile', () => createNewPixelFile()),
+    vscode.commands.registerCommand('pixelVscode.newGodotMap', () => createGodotMap()),
+    vscode.commands.registerCommand('pixelVscode.newPixelMonsterHud', () => createPixelMonsterHud()),
+    vscode.commands.registerCommand('pixelVscode.newPixelMonsterCharacter', () => createPixelMonsterCharacter()),
     vscode.commands.registerCommand('pixelVscode.openEditor', (resource?: vscode.Uri) => openWithPixelEditor(resource)),
     vscode.commands.registerCommand('pixelVscode.previewAnimation', (resource?: vscode.Uri, selectedResources?: vscode.Uri[]) =>
       openAnimationPreview(context, resource, selectedResources)
+    ),
+    vscode.commands.registerCommand('pixelVscode.syncPixelMonsterCharacter', (resource?: vscode.Uri) =>
+      syncPixelMonsterCharacter(resource)
+    ),
+    vscode.commands.registerCommand('pixelVscode.previewTscn', (resource?: vscode.Uri) =>
+      openTscnPreview(resource)
     )
   );
 }
 
 export function deactivate() {}
+
+async function openTscnPreview(resource?: vscode.Uri) {
+  const uri = resource ?? vscode.window.activeTextEditor?.document.uri;
+  if (!uri) {
+    vscode.window.showWarningMessage('Select a .tscn file to preview.');
+    return;
+  }
+  if (path.extname(uri.path).toLowerCase() !== '.tscn') {
+    vscode.window.showWarningMessage('Scene preview only supports .tscn files.');
+    return;
+  }
+  await vscode.commands.executeCommand('vscode.openWith', uri, TscnPreviewProvider.viewType);
+}
 
 async function createNewPixelFile() {
   const sizeInput = await vscode.window.showInputBox({
@@ -348,21 +396,25 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
     };
     webviewPanel.webview.html = this.getHtml(webviewPanel.webview);
 
-    const postDocument = () => {
+    const postDocument = async () => {
+      const assetProfile = getPixelAssetProfile(document.uri);
+      const collisionPoints = await readCollisionPolygon(document.uri);
       webviewPanel.webview.postMessage({
         type: 'init',
         filename: path.basename(document.uri.path),
-        dataUri: `data:image/png;base64,${Buffer.from(document.data).toString('base64')}`
+        dataUri: `data:image/png;base64,${Buffer.from(document.data).toString('base64')}`,
+        assetProfile,
+        collisionPoints
       });
     };
 
-    const changeSubscription = document.onDidChangeContent(() => postDocument());
+    const changeSubscription = document.onDidChangeContent(() => void postDocument());
     webviewPanel.onDidDispose(() => changeSubscription.dispose());
 
     webviewPanel.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
       switch (message.type) {
         case 'ready':
-          postDocument();
+          await postDocument();
           return;
 
         case 'edit':
@@ -374,6 +426,15 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
 
         case 'save':
           await vscode.commands.executeCommand('workbench.action.files.save');
+          return;
+
+        case 'syncCharacter':
+          await vscode.commands.executeCommand('workbench.action.files.save');
+          await syncPixelMonsterCharacter(document.uri);
+          return;
+
+        case 'saveCollision':
+          await this.saveCollision(document.uri, message.points ?? []);
           return;
       }
     });
@@ -433,6 +494,26 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
     });
   }
 
+  private async saveCollision(pngUri: vscode.Uri, points: number[]): Promise<void> {
+    try {
+      if (points.length === 0) {
+        await deleteCollisionPolygon(pngUri);
+        vscode.window.showInformationMessage('Hitbox cleared.');
+        return;
+      }
+
+      if (points.length < 6 || points.length % 2 !== 0) {
+        vscode.window.showWarningMessage('A hitbox needs at least 3 points.');
+        return;
+      }
+
+      const resourceUri = await writeCollisionPolygon(pngUri, points);
+      vscode.window.showInformationMessage(`Hitbox saved: ${path.basename(resourceUri.fsPath)}`);
+    } catch (error) {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   private getHtml(webview: vscode.Webview): string {
     const nonce = getNonce();
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'editor.css'));
@@ -461,15 +542,24 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
         <label class="compact-label" for="colorInput">Color</label>
         <input id="colorInput" class="color-input" type="color" value="#2f80ed" title="Color">
         <label class="compact-label" for="brushSize">Brush</label>
-        <input id="brushSize" class="range" type="range" min="1" max="8" step="1" value="1" title="Brush size">
+        <input id="brushSize" class="range" type="range" min="1" max="64" step="1" value="1" title="Brush size">
         <output id="brushSizeLabel" class="metric">1</output>
       </section>
 
       <section class="tool-group" aria-label="View">
         <label class="compact-label" for="zoom">Zoom</label>
-        <input id="zoom" class="range" type="range" min="4" max="40" step="1" value="16" title="Zoom">
+        <input id="zoom" class="range" type="range" min="1" max="40" step="1" value="16" title="Zoom">
         <output id="zoomLabel" class="metric">16x</output>
         <button id="toggleGrid" class="icon-button active" type="button" title="Toggle grid" aria-label="Toggle grid">#</button>
+        <label class="compact-label" for="guideSize">Guide</label>
+        <select id="guideSize" class="select-input" title="Guide grid size">
+          <option value="1">1 px</option>
+          <option value="8">8 px</option>
+          <option value="16">16 px</option>
+          <option value="32">32 px</option>
+          <option value="64">64 px</option>
+          <option value="128">128 px</option>
+        </select>
       </section>
 
       <section class="tool-group" aria-label="Canvas size">
@@ -479,8 +569,17 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
         <button id="resizeButton" class="text-button" type="button">Resize</button>
       </section>
 
+      <section class="tool-group" aria-label="Hitbox">
+        <button class="icon-button" type="button" data-tool="hitbox" title="Edit hitbox (click to add a point, drag to move, right-click to delete)" aria-label="Edit hitbox">H</button>
+        <button id="autoTraceButton" class="text-button" type="button" title="Generate a convex hitbox from the sprite's opaque pixels">Auto</button>
+        <button id="clearHitboxButton" class="text-button" type="button" title="Remove all hitbox points">Clear</button>
+        <button id="saveHitboxButton" class="text-button" type="button" title="Write the hitbox to a ConvexPolygonShape2D .tres next to this PNG">Save Hitbox</button>
+        <output id="hitboxPointCount" class="metric" title="Hitbox point count">0</output>
+      </section>
+
       <section class="tool-group push" aria-label="File">
         <span id="fileStatus" class="status">pixel.png</span>
+        <button id="syncCharacterButton" class="text-button" type="button" hidden>Sync Pack</button>
         <button id="saveButton" class="text-button primary" type="button">Save</button>
       </section>
     </header>
@@ -489,6 +588,7 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
       <section class="workspace" aria-label="Pixel canvas workspace">
         <div id="canvasFrame" class="canvas-frame grid">
           <canvas id="pixelCanvas" class="pixel-canvas" aria-label="Pixel canvas"></canvas>
+          <svg id="hitboxOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
         </div>
       </section>
 
@@ -610,7 +710,33 @@ type AnimationPreviewMessage =
 type WebviewMessage =
   | { type: 'ready' }
   | { type: 'edit'; dataUri?: string; label?: string }
-  | { type: 'save' };
+  | { type: 'save' }
+  | { type: 'syncCharacter' }
+  | { type: 'saveCollision'; points?: number[] };
+
+type PixelAssetProfile = {
+  kind: 'lpc-action';
+  entityType: 'character' | 'monster';
+  entityId: string;
+  action: string;
+  guideSize: number;
+};
+
+function getPixelAssetProfile(uri: vscode.Uri): PixelAssetProfile | undefined {
+  const normalized = uri.fsPath.replaceAll('\\', '/');
+  const match = normalized.match(/\/lpc_(characters|monsters)_full\/([^/]+)\/([^/]+)\.png$/);
+  if (!match) {
+    return undefined;
+  }
+
+  return {
+    kind: 'lpc-action',
+    entityType: match[1] === 'characters' ? 'character' : 'monster',
+    entityId: match[2],
+    action: match[3],
+    guideSize: 64
+  };
+}
 
 function decodePngDataUri(dataUri: string): Uint8Array | undefined {
   const match = dataUri.match(/^data:image\/png;base64,(.+)$/);
