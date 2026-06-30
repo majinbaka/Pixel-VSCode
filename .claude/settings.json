@@ -9,7 +9,18 @@
       "Bash(code --list-extensions)",
       "Read(//home/anhnv/.vscode/extensions/**)",
       "Read(//home/anhnv/**)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(node --check /home/anhnv/Code/pixel-vscode/media/editor.js)",
+      "Bash(code --version)",
+      "Bash(timeout 5 xdpyinfo -display :0)",
+      "Bash(mkdir -p /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/62ac495e-957a-4ac4-a83c-13a3e54551a2/scratchpad/rig-test)",
+      "Bash(python3 -c ' *)",
+      "Bash(pip install *)",
+      "Bash(DISPLAY=:0 code --new-window --extensionDevelopmentPath=/home/anhnv/Code/pixel-vscode /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/62ac495e-957a-4ac4-a83c-13a3e54551a2/scratchpad/rig-test)",
+      "Bash(disown)",
+      "Bash(DISPLAY=:0 gnome-screenshot -f /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/62ac495e-957a-4ac4-a83c-13a3e54551a2/scratchpad/rig-test/screen1.png)",
+      "Bash(DISPLAY=:0 import -window root /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/62ac495e-957a-4ac4-a83c-13a3e54551a2/scratchpad/rig-test/screen1.png)",
+      "Bash(pkill -f \"rig-test\")"
     ]
   }
 }

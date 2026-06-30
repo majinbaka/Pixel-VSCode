@@ -532,10 +532,10 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
   <main class="app">
     <header class="toolbar" aria-label="Pixel editor toolbar">
       <section class="tool-group" aria-label="Tools">
-        <button class="icon-button active" type="button" data-tool="pencil" title="Pencil" aria-label="Pencil">P</button>
-        <button class="icon-button" type="button" data-tool="eraser" title="Eraser" aria-label="Eraser">E</button>
-        <button class="icon-button" type="button" data-tool="fill" title="Fill" aria-label="Fill">F</button>
-        <button class="icon-button" type="button" data-tool="picker" title="Color picker" aria-label="Color picker">I</button>
+        <button class="icon-button active" type="button" data-tool="pencil" title="Pencil" aria-label="Pencil">✏️</button>
+        <button class="icon-button" type="button" data-tool="eraser" title="Eraser" aria-label="Eraser">🧹</button>
+        <button class="icon-button" type="button" data-tool="fill" title="Fill" aria-label="Fill">🪣</button>
+        <button class="icon-button" type="button" data-tool="picker" title="Color picker" aria-label="Color picker">💧</button>
       </section>
 
       <section class="tool-group" aria-label="Brush">
@@ -548,9 +548,10 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
 
       <section class="tool-group" aria-label="View">
         <label class="compact-label" for="zoom">Zoom</label>
-        <input id="zoom" class="range" type="range" min="1" max="40" step="1" value="16" title="Zoom">
+        <input id="zoom" class="range" type="range" min="0.1" max="40" step="0.1" value="16" title="Zoom">
+        <button id="fitZoomButton" class="text-button" type="button" title="Fit image to the visible workspace">Fit</button>
         <output id="zoomLabel" class="metric">16x</output>
-        <button id="toggleGrid" class="icon-button active" type="button" title="Toggle grid" aria-label="Toggle grid">#</button>
+        <button id="toggleGrid" class="icon-button active" type="button" title="Toggle grid" aria-label="Toggle grid">▦</button>
         <label class="compact-label" for="guideSize">Guide</label>
         <select id="guideSize" class="select-input" title="Guide grid size">
           <option value="1">1 px</option>
@@ -570,11 +571,19 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
       </section>
 
       <section class="tool-group" aria-label="Hitbox">
-        <button class="icon-button" type="button" data-tool="hitbox" title="Edit hitbox (click to add a point, drag to move, right-click to delete)" aria-label="Edit hitbox">H</button>
+        <button class="icon-button" type="button" data-tool="hitbox" title="Edit hitbox (click to add a point, drag to move, right-click to delete)" aria-label="Edit hitbox">⬡</button>
         <button id="autoTraceButton" class="text-button" type="button" title="Generate a convex hitbox from the sprite's opaque pixels">Auto</button>
         <button id="clearHitboxButton" class="text-button" type="button" title="Remove all hitbox points">Clear</button>
         <button id="saveHitboxButton" class="text-button" type="button" title="Write the hitbox to a ConvexPolygonShape2D .tres next to this PNG">Save Hitbox</button>
         <output id="hitboxPointCount" class="metric" title="Hitbox point count">0</output>
+      </section>
+
+      <section class="tool-group" aria-label="Rig">
+        <button class="icon-button" type="button" data-tool="rig" title="Rig: drag the pivot, then drag the handle to rotate the active layer" aria-label="Rig tool">🦴</button>
+        <label class="compact-label" for="rigAngle">Angle</label>
+        <input id="rigAngle" class="number-input" type="number" step="1" value="0" title="Rotation angle in degrees">
+        <button id="applyRigButton" class="text-button" type="button" title="Bake the current rotation into the active layer's pixels">Apply</button>
+        <button id="resetRigButton" class="text-button" type="button" title="Reset rotation and pivot for the active layer">Reset</button>
       </section>
 
       <section class="tool-group push" aria-label="File">
@@ -585,10 +594,11 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
     </header>
 
     <section class="editor-shell" aria-label="Pixel editor workspace">
-      <section class="workspace" aria-label="Pixel canvas workspace">
+      <section id="workspace" class="workspace" aria-label="Pixel canvas workspace">
         <div id="canvasFrame" class="canvas-frame grid">
           <canvas id="pixelCanvas" class="pixel-canvas" aria-label="Pixel canvas"></canvas>
           <svg id="hitboxOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
+          <svg id="rigOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
         </div>
       </section>
 
@@ -606,13 +616,13 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
             <span class="panel-title">Layers</span>
             <div class="panel-actions">
               <button id="addLayerButton" class="icon-button" type="button" title="Add layer" aria-label="Add layer">+</button>
-              <button id="duplicateLayerButton" class="icon-button" type="button" title="Duplicate layer" aria-label="Duplicate layer">D</button>
-              <button id="deleteLayerButton" class="icon-button" type="button" title="Delete layer" aria-label="Delete layer">-</button>
+              <button id="duplicateLayerButton" class="icon-button" type="button" title="Duplicate layer" aria-label="Duplicate layer">⧉</button>
+              <button id="deleteLayerButton" class="icon-button" type="button" title="Delete layer" aria-label="Delete layer">🗑️</button>
             </div>
           </div>
           <div class="layer-actions">
-            <button id="moveLayerUpButton" class="text-button" type="button">Up</button>
-            <button id="moveLayerDownButton" class="text-button" type="button">Down</button>
+            <button id="moveLayerUpButton" class="icon-button" type="button" title="Move layer up" aria-label="Move layer up">↑</button>
+            <button id="moveLayerDownButton" class="icon-button" type="button" title="Move layer down" aria-label="Move layer down">↓</button>
           </div>
           <label class="opacity-control" for="layerOpacity">
             <span class="compact-label">Opacity</span>

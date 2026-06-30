@@ -4,12 +4,14 @@
   const canvas = document.getElementById('pixelCanvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const canvasFrame = document.getElementById('canvasFrame');
+  const workspace = document.getElementById('workspace');
   const fileStatus = document.getElementById('fileStatus');
   const colorInput = document.getElementById('colorInput');
   const brushSizeInput = document.getElementById('brushSize');
   const brushSizeLabel = document.getElementById('brushSizeLabel');
   const zoomInput = document.getElementById('zoom');
   const zoomLabel = document.getElementById('zoomLabel');
+  const fitZoomButton = document.getElementById('fitZoomButton');
   const guideSizeSelect = document.getElementById('guideSize');
   const widthInput = document.getElementById('widthInput');
   const heightInput = document.getElementById('heightInput');
@@ -33,6 +35,10 @@
   const clearHitboxButton = document.getElementById('clearHitboxButton');
   const saveHitboxButton = document.getElementById('saveHitboxButton');
   const hitboxPointCount = document.getElementById('hitboxPointCount');
+  const rigOverlay = document.getElementById('rigOverlay');
+  const rigAngleInput = document.getElementById('rigAngle');
+  const applyRigButton = document.getElementById('applyRigButton');
+  const resetRigButton = document.getElementById('resetRigButton');
 
   const palettes = [
     {
@@ -93,6 +99,9 @@
     collision: {
       points: [],
       draggingIndex: -1
+    },
+    rig: {
+      dragMode: undefined
     }
   };
 
@@ -102,6 +111,11 @@
       button.classList.toggle('active', button.dataset.tool === tool);
     }
     canvas.style.cursor = tool === 'picker' ? 'copy' : 'crosshair';
+    const layer = getActiveLayer();
+    if (tool === 'rig' && layer) {
+      updateRigAngleInput(layer);
+    }
+    renderRigOverlay();
   }
 
   function updateCanvasDisplaySize() {
@@ -112,12 +126,26 @@
   }
 
   function setZoom(value) {
-    const zoom = Math.max(1, Math.min(40, Number(value) || 16));
+    const zoom = Math.max(0.1, Math.min(40, Number(value) || 16));
     state.zoom = zoom;
     zoomInput.value = String(zoom);
-    zoomLabel.value = `${zoom}x`;
+    zoomLabel.value = `${Math.round(zoom * 100) / 100}x`;
     updateCanvasDisplaySize();
     renderHitboxOverlay();
+    renderRigOverlay();
+  }
+
+  function fitZoomToWorkspace() {
+    if (!canvas.width || !canvas.height || !workspace) {
+      return;
+    }
+
+    const padding = 64;
+    const availableWidth = Math.max(1, workspace.clientWidth - padding);
+    const availableHeight = Math.max(1, workspace.clientHeight - padding);
+    const fitZoom = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+    const niceZoom = fitZoom >= 1 ? Math.max(1, Math.floor(fitZoom)) : fitZoom;
+    setZoom(niceZoom);
   }
 
   function setGuideSize(value) {
@@ -153,7 +181,11 @@
       name,
       visible: true,
       opacity: 1,
-      canvas: layerCanvas
+      canvas: layerCanvas,
+      rig: {
+        pivot: { x: layerCanvas.width / 2, y: layerCanvas.height / 2 },
+        angle: 0
+      }
     };
   }
 
@@ -169,6 +201,11 @@
     state.activeLayerId = id;
     renderLayersPanel();
     renderComposite();
+    const layer = getActiveLayer();
+    if (state.tool === 'rig' && layer) {
+      updateRigAngleInput(layer);
+    }
+    renderRigOverlay();
   }
 
   function setBrushSize(value) {
@@ -179,6 +216,7 @@
 
   function renderComposite() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
 
     for (const layer of state.layers) {
       if (!layer.visible || layer.opacity <= 0) {
@@ -187,6 +225,11 @@
 
       ctx.save();
       ctx.globalAlpha = layer.opacity;
+      if (layer.rig.angle) {
+        ctx.translate(layer.rig.pivot.x, layer.rig.pivot.y);
+        ctx.rotate(layer.rig.angle);
+        ctx.translate(-layer.rig.pivot.x, -layer.rig.pivot.y);
+      }
       ctx.drawImage(layer.canvas, 0, 0);
       ctx.restore();
     }
@@ -196,6 +239,7 @@
     const image = new Image();
     image.onload = () => {
       setCanvasSize(image.naturalWidth, image.naturalHeight);
+      fitZoomToWorkspace();
       const baseCanvas = createLayerCanvas(canvas.width, canvas.height);
       baseCanvas.getContext('2d').drawImage(image, 0, 0);
 
@@ -209,6 +253,7 @@
       renderLayersPanel();
       renderComposite();
       renderHitboxOverlay();
+      renderRigOverlay();
     };
     image.src = dataUri;
   }
@@ -309,6 +354,164 @@
       circle.setAttribute('class', 'hitbox-point');
       hitboxOverlay.append(circle);
     }
+  }
+
+  function rigHandleDistance() {
+    return Math.max(canvas.width, canvas.height) / 4;
+  }
+
+  function rigHandlePosition(layer) {
+    const distance = rigHandleDistance();
+    return {
+      x: layer.rig.pivot.x + Math.cos(layer.rig.angle - Math.PI / 2) * distance,
+      y: layer.rig.pivot.y + Math.sin(layer.rig.angle - Math.PI / 2) * distance
+    };
+  }
+
+  function renderRigOverlay() {
+    if (!state.ready) {
+      return;
+    }
+
+    rigOverlay.setAttribute('viewBox', `0 0 ${canvas.width} ${canvas.height}`);
+    rigOverlay.replaceChildren();
+
+    if (state.tool !== 'rig') {
+      return;
+    }
+
+    const layer = getActiveLayer();
+    if (!layer) {
+      return;
+    }
+
+    const handle = rigHandlePosition(layer);
+    const pivotRadius = Math.max(0.75, 6 / state.zoom);
+    const handleRadius = Math.max(0.5, 4 / state.zoom);
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', String(layer.rig.pivot.x));
+    line.setAttribute('y1', String(layer.rig.pivot.y));
+    line.setAttribute('x2', String(handle.x));
+    line.setAttribute('y2', String(handle.y));
+    line.setAttribute('class', 'rig-line');
+    rigOverlay.append(line);
+
+    const pivotPoint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    pivotPoint.setAttribute('cx', String(layer.rig.pivot.x));
+    pivotPoint.setAttribute('cy', String(layer.rig.pivot.y));
+    pivotPoint.setAttribute('r', String(pivotRadius));
+    pivotPoint.setAttribute('class', 'rig-pivot');
+    rigOverlay.append(pivotPoint);
+
+    const handlePoint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    handlePoint.setAttribute('cx', String(handle.x));
+    handlePoint.setAttribute('cy', String(handle.y));
+    handlePoint.setAttribute('r', String(handleRadius));
+    handlePoint.setAttribute('class', 'rig-handle');
+    rigOverlay.append(handlePoint);
+  }
+
+  function updateRigAngleInput(layer) {
+    const degrees = Math.round((layer.rig.angle * 180) / Math.PI);
+    rigAngleInput.value = String(degrees);
+  }
+
+  function setRigAngleFromInput() {
+    const layer = getActiveLayer();
+    if (!layer) {
+      return;
+    }
+
+    const degrees = Number(rigAngleInput.value) || 0;
+    layer.rig.angle = (degrees * Math.PI) / 180;
+    renderComposite();
+    renderRigOverlay();
+  }
+
+  function handleRigPointerDown(x, y) {
+    const layer = getActiveLayer();
+    if (!layer) {
+      return;
+    }
+
+    const threshold = 10 / state.zoom;
+    const handle = rigHandlePosition(layer);
+    const distanceToHandle = Math.hypot(handle.x - x, handle.y - y);
+    const distanceToPivot = Math.hypot(layer.rig.pivot.x - x, layer.rig.pivot.y - y);
+
+    if (distanceToHandle <= threshold) {
+      state.rig.dragMode = 'rotate';
+    } else if (distanceToPivot <= threshold) {
+      state.rig.dragMode = 'pivot';
+    } else {
+      state.rig.dragMode = 'rotate';
+      const dx = x - layer.rig.pivot.x;
+      const dy = y - layer.rig.pivot.y;
+      layer.rig.angle = Math.atan2(dy, dx) + Math.PI / 2;
+      updateRigAngleInput(layer);
+      renderComposite();
+    }
+
+    renderRigOverlay();
+  }
+
+  function handleRigPointerMove(x, y) {
+    if (!state.rig.dragMode) {
+      return;
+    }
+
+    const layer = getActiveLayer();
+    if (!layer) {
+      return;
+    }
+
+    if (state.rig.dragMode === 'pivot') {
+      layer.rig.pivot = { x, y };
+    } else if (state.rig.dragMode === 'rotate') {
+      const dx = x - layer.rig.pivot.x;
+      const dy = y - layer.rig.pivot.y;
+      layer.rig.angle = Math.atan2(dy, dx) + Math.PI / 2;
+      updateRigAngleInput(layer);
+    }
+
+    renderComposite();
+    renderRigOverlay();
+  }
+
+  function applyRigRotation() {
+    const layer = getActiveLayer();
+    if (!layer || !layer.rig.angle) {
+      return;
+    }
+
+    const rotated = createLayerCanvas(canvas.width, canvas.height);
+    const rotatedCtx = rotated.getContext('2d');
+    rotatedCtx.imageSmoothingEnabled = false;
+    rotatedCtx.translate(layer.rig.pivot.x, layer.rig.pivot.y);
+    rotatedCtx.rotate(layer.rig.angle);
+    rotatedCtx.translate(-layer.rig.pivot.x, -layer.rig.pivot.y);
+    rotatedCtx.drawImage(layer.canvas, 0, 0);
+
+    layer.canvas = rotated;
+    layer.rig.angle = 0;
+    updateRigAngleInput(layer);
+    renderComposite();
+    renderRigOverlay();
+    commit('Apply rig rotation');
+  }
+
+  function resetRig() {
+    const layer = getActiveLayer();
+    if (!layer) {
+      return;
+    }
+
+    layer.rig.pivot = { x: canvas.width / 2, y: canvas.height / 2 };
+    layer.rig.angle = 0;
+    updateRigAngleInput(layer);
+    renderComposite();
+    renderRigOverlay();
   }
 
   function convexHull(rawPoints) {
@@ -552,6 +755,11 @@
       return;
     }
 
+    if (state.tool === 'rig') {
+      handleRigPointerDown(x, y);
+      return;
+    }
+
     if (state.tool === 'picker') {
       pickColor(x, y);
       return;
@@ -578,6 +786,12 @@
       return;
     }
 
+    if (state.tool === 'rig') {
+      const { x, y } = eventToPixel(event);
+      handleRigPointerMove(x, y);
+      return;
+    }
+
     if (!state.drawing) {
       return;
     }
@@ -599,6 +813,12 @@
 
     if (state.tool === 'hitbox') {
       state.collision.draggingIndex = -1;
+      state.pointerId = undefined;
+      return;
+    }
+
+    if (state.tool === 'rig') {
+      state.rig.dragMode = undefined;
       state.pointerId = undefined;
       return;
     }
@@ -629,6 +849,7 @@
     state.collision.draggingIndex = -1;
     renderComposite();
     renderHitboxOverlay();
+    renderRigOverlay();
     commit('Resize canvas');
   }
 
@@ -752,7 +973,7 @@
       visibility.type = 'button';
       visibility.title = layer.visible ? 'Hide layer' : 'Show layer';
       visibility.setAttribute('aria-label', visibility.title);
-      visibility.textContent = layer.visible ? 'V' : '';
+      visibility.textContent = layer.visible ? '👁️' : '🚫';
       visibility.addEventListener('click', (event) => {
         event.stopPropagation();
         toggleLayerVisibility(layer.id);
@@ -825,6 +1046,7 @@
 
   brushSizeInput.addEventListener('input', () => setBrushSize(brushSizeInput.value));
   zoomInput.addEventListener('input', () => setZoom(zoomInput.value));
+  fitZoomButton.addEventListener('click', fitZoomToWorkspace);
   guideSizeSelect.addEventListener('change', () => setGuideSize(guideSizeSelect.value));
   resizeButton.addEventListener('click', resizeCanvas);
   saveButton.addEventListener('click', () => vscode.postMessage({ type: 'save' }));
@@ -853,6 +1075,10 @@
     vscode.postMessage({ type: 'saveCollision', points: flattenHitboxPoints() });
   });
 
+  rigAngleInput.addEventListener('change', setRigAngleFromInput);
+  applyRigButton.addEventListener('click', applyRigRotation);
+  resetRigButton.addEventListener('click', resetRig);
+
   canvas.addEventListener('pointerdown', handlePointerDown);
   canvas.addEventListener('pointermove', handlePointerMove);
   canvas.addEventListener('pointerup', stopDrawing);
@@ -875,7 +1101,6 @@
       syncCharacterButton.hidden = message.assetProfile?.kind !== 'lpc-action';
       if (message.assetProfile?.kind === 'lpc-action') {
         setGuideSize(message.assetProfile.guideSize);
-        setZoom(2);
       }
       loadImage(message.dataUri, message.filename);
     }
