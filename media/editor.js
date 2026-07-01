@@ -18,6 +18,7 @@
   const saveButton = document.getElementById('saveButton');
   const syncCharacterButton = document.getElementById('syncCharacterButton');
   const toggleGridButton = document.getElementById('toggleGrid');
+  const toggleSnapButton = document.getElementById('toggleSnap');
   const paletteSelect = document.getElementById('paletteSelect');
   const paletteSwatches = document.getElementById('paletteSwatches');
   const layersList = document.getElementById('layersList');
@@ -101,6 +102,7 @@
     nextLayerId: 1,
     nextPivotId: 1,
     guideSize: 1,
+    snapToGuide: false,
     assetProfile: undefined,
     pendingCollisionPoints: undefined,
     collision: {
@@ -1231,8 +1233,14 @@
       }
     }
 
-    const px = Math.floor(x);
-    const py = Math.floor(y);
+    let px, py;
+    if (state.snapToGuide && state.guideSize > 1) {
+      px = Math.floor(x / state.guideSize) * state.guideSize;
+      py = Math.floor(y / state.guideSize) * state.guideSize;
+    } else {
+      px = Math.floor(x);
+      py = Math.floor(y);
+    }
     if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) {
       return null;
     }
@@ -1247,6 +1255,19 @@
   function updateCursorOverlay(x, y) {
     if (state.tool === 'hitbox' || state.tool === 'rig' || isSelectionTool(state.tool)) {
       hideCursorOverlay();
+      return;
+    }
+
+    if (state.snapToGuide && state.guideSize > 1) {
+      const left = x;
+      const top = y;
+      const width = Math.min(state.guideSize, canvas.width - left);
+      const height = Math.min(state.guideSize, canvas.height - top);
+      cursorOverlay.style.left = `${left * state.zoom}px`;
+      cursorOverlay.style.top = `${top * state.zoom}px`;
+      cursorOverlay.style.width = `${width * state.zoom}px`;
+      cursorOverlay.style.height = `${height * state.zoom}px`;
+      cursorOverlay.hidden = false;
       return;
     }
 
@@ -1285,12 +1306,20 @@
     }
 
     const layerCtx = layer.canvas.getContext('2d', { willReadFrequently: true });
-    const size = Number(brushSizeInput.value);
-    const half = Math.floor(size / 2);
-    const left = Math.max(0, x - half);
-    const top = Math.max(0, y - half);
-    const width = Math.min(size, canvas.width - left);
-    const height = Math.min(size, canvas.height - top);
+    let left, top, width, height;
+    if (state.snapToGuide && state.guideSize > 1) {
+      left = x;
+      top = y;
+      width = Math.min(state.guideSize, canvas.width - left);
+      height = Math.min(state.guideSize, canvas.height - top);
+    } else {
+      const size = Number(brushSizeInput.value);
+      const half = Math.floor(size / 2);
+      left = Math.max(0, x - half);
+      top = Math.max(0, y - half);
+      width = Math.min(size, canvas.width - left);
+      height = Math.min(size, canvas.height - top);
+    }
 
     if (state.tool === 'eraser') {
       layerCtx.clearRect(left, top, width, height);
@@ -1577,15 +1606,20 @@
     let startW = 0, startH = 0;
     let pending = null;
 
+    function snapToGuide(v) {
+      if (!state.snapToGuide || state.guideSize <= 1) return v;
+      return Math.max(state.guideSize, Math.round(v / state.guideSize) * state.guideSize);
+    }
+
     function calcResize(e) {
       const dx = Math.round((e.clientX - startX) / state.zoom);
       const dy = Math.round((e.clientY - startY) / state.zoom);
       let newW = startW, newH = startH, offX = 0, offY = 0;
 
-      if (dragEdge.includes('e')) newW = Math.max(1, startW + dx);
-      if (dragEdge.includes('s')) newH = Math.max(1, startH + dy);
-      if (dragEdge.includes('w')) { const added = Math.max(0, -dx); newW = startW + added; offX = added; }
-      if (dragEdge.includes('n')) { const added = Math.max(0, -dy); newH = startH + added; offY = added; }
+      if (dragEdge.includes('e')) newW = snapToGuide(Math.max(1, startW + dx));
+      if (dragEdge.includes('s')) newH = snapToGuide(Math.max(1, startH + dy));
+      if (dragEdge.includes('w')) { const raw = startW + Math.max(0, -dx); newW = snapToGuide(Math.max(1, raw)); offX = newW - startW; }
+      if (dragEdge.includes('n')) { const raw = startH + Math.max(0, -dy); newH = snapToGuide(Math.max(1, raw)); offY = newH - startH; }
 
       return { newW, newH, offX, offY };
     }
@@ -1868,6 +1902,11 @@
   toggleGridButton.addEventListener('click', () => {
     canvasFrame.classList.toggle('grid');
     toggleGridButton.classList.toggle('active', canvasFrame.classList.contains('grid'));
+  });
+
+  toggleSnapButton.addEventListener('click', () => {
+    state.snapToGuide = !state.snapToGuide;
+    toggleSnapButton.classList.toggle('active', state.snapToGuide);
   });
 
   selectionMoveButton.addEventListener('click', () => {

@@ -413,7 +413,16 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
   }
 
   public async saveCustomDocument(document: PixelDocument, _cancellation: vscode.CancellationToken): Promise<void> {
-    await vscode.workspace.fs.writeFile(document.uri, document.data);
+    const confirmed = await confirmOverwrite(document.uri);
+    if (confirmed === 'overwrite') {
+      await vscode.workspace.fs.writeFile(document.uri, document.data);
+    } else if (confirmed === 'saveas') {
+      const newUri = await pickNonConflictingUri(document.uri);
+      if (newUri) {
+        await vscode.workspace.fs.writeFile(newUri, document.data);
+        await vscode.commands.executeCommand('vscode.openWith', newUri, VIEW_TYPE);
+      }
+    }
   }
 
   public async saveCustomDocumentAs(
@@ -543,6 +552,7 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
         <button id="fitZoomButton" class="text-button" type="button" title="Fit image to the visible workspace">Fit</button>
         <output id="zoomLabel" class="metric">16x</output>
         <button id="toggleGrid" class="icon-button active" type="button" title="Toggle grid" aria-label="Toggle grid">▦</button>
+        <button id="toggleSnap" class="icon-button" type="button" title="Snap to guide grid" aria-label="Snap to guide">⊹</button>
         <label class="compact-label" for="guideSize">Guide</label>
         <select id="guideSize" class="select-input" title="Guide grid size">
           <option value="1">1 px</option>
@@ -746,6 +756,52 @@ function getPixelAssetProfile(uri: vscode.Uri): PixelAssetProfile | undefined {
     action: match[3],
     guideSize: 64
   };
+}
+
+async function confirmOverwrite(uri: vscode.Uri): Promise<'overwrite' | 'saveas' | 'cancel'> {
+  let exists = false;
+  try {
+    await vscode.workspace.fs.stat(uri);
+    exists = true;
+  } catch {
+    exists = false;
+  }
+
+  if (!exists) {
+    return 'overwrite';
+  }
+
+  const answer = await vscode.window.showWarningMessage(
+    `"${path.basename(uri.fsPath)}" already exists. Overwrite the original file?`,
+    { modal: true },
+    'Overwrite',
+    'Save as new file'
+  );
+
+  if (answer === 'Overwrite') {
+    return 'overwrite';
+  }
+  if (answer === 'Save as new file') {
+    return 'saveas';
+  }
+  return 'cancel';
+}
+
+async function pickNonConflictingUri(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
+  const dir = path.dirname(uri.fsPath);
+  const base = path.basename(uri.fsPath, '.png');
+  let candidate: vscode.Uri;
+  let counter = 1;
+  do {
+    candidate = vscode.Uri.file(path.join(dir, `${base}_${counter}.png`));
+    counter++;
+    try {
+      await vscode.workspace.fs.stat(candidate);
+    } catch {
+      break;
+    }
+  } while (counter < 1000);
+  return candidate;
 }
 
 function decodePngDataUri(dataUri: string): Uint8Array | undefined {

@@ -28,7 +28,7 @@ export interface LayerStateFile {
 export function layerStateResourceUri(pngUri: vscode.Uri): vscode.Uri {
   const dir = path.dirname(pngUri.fsPath);
   const base = path.basename(pngUri.fsPath, '.png');
-  return vscode.Uri.file(path.join(dir, `${base}.layers.json`));
+  return vscode.Uri.file(path.join(dir, `.${base}_image.pixvjson`));
 }
 
 export async function readLayerState(pngUri: vscode.Uri): Promise<LayerStateFile | undefined> {
