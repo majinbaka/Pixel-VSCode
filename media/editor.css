@@ -191,6 +191,90 @@ button:disabled {
   background: var(--vscode-dropdown-background);
 }
 
+.resize-preview {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  outline: 2px dashed var(--accent);
+  outline-offset: -1px;
+}
+
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+}
+
+.resize-handle[data-edge="n"] {
+  top: -5px; left: 10px; right: 10px; height: 10px;
+  cursor: n-resize;
+}
+.resize-handle[data-edge="s"] {
+  bottom: -5px; left: 10px; right: 10px; height: 10px;
+  cursor: s-resize;
+}
+.resize-handle[data-edge="e"] {
+  right: -5px; top: 10px; bottom: 10px; width: 10px;
+  cursor: e-resize;
+}
+.resize-handle[data-edge="w"] {
+  left: -5px; top: 10px; bottom: 10px; width: 10px;
+  cursor: w-resize;
+}
+.resize-handle[data-edge="nw"] {
+  top: -5px; left: -5px; width: 14px; height: 14px;
+  cursor: nw-resize;
+}
+.resize-handle[data-edge="ne"] {
+  top: -5px; right: -5px; width: 14px; height: 14px;
+  cursor: ne-resize;
+}
+.resize-handle[data-edge="sw"] {
+  bottom: -5px; left: -5px; width: 14px; height: 14px;
+  cursor: sw-resize;
+}
+.resize-handle[data-edge="se"] {
+  bottom: -5px; right: -5px; width: 14px; height: 14px;
+  cursor: se-resize;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.canvas-frame:hover .resize-handle::after,
+.resize-handle:hover::after {
+  opacity: 1;
+}
+
+.resize-handle[data-edge="n"]::after,
+.resize-handle[data-edge="s"]::after {
+  left: 50%; top: 50%;
+  width: 20px; height: 4px;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+}
+.resize-handle[data-edge="e"]::after,
+.resize-handle[data-edge="w"]::after {
+  left: 50%; top: 50%;
+  width: 4px; height: 20px;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+}
+.resize-handle[data-edge="nw"]::after,
+.resize-handle[data-edge="ne"]::after,
+.resize-handle[data-edge="sw"]::after,
+.resize-handle[data-edge="se"]::after {
+  width: 8px; height: 8px;
+  top: 50%; left: 50%;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+}
+
 .editor-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 292px;

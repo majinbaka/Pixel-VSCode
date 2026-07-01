@@ -13,9 +13,8 @@
   const zoomLabel = document.getElementById('zoomLabel');
   const fitZoomButton = document.getElementById('fitZoomButton');
   const guideSizeSelect = document.getElementById('guideSize');
-  const widthInput = document.getElementById('widthInput');
-  const heightInput = document.getElementById('heightInput');
-  const resizeButton = document.getElementById('resizeButton');
+  const canvasSizeDisplay = document.getElementById('canvasSizeDisplay');
+  const resizeHandles = Array.from(document.querySelectorAll('.resize-handle'));
   const saveButton = document.getElementById('saveButton');
   const syncCharacterButton = document.getElementById('syncCharacterButton');
   const toggleGridButton = document.getElementById('toggleGrid');
@@ -162,8 +161,7 @@
   function setCanvasSize(width, height) {
     canvas.width = width;
     canvas.height = height;
-    widthInput.value = String(width);
-    heightInput.value = String(height);
+    canvasSizeDisplay.textContent = `${width} x ${height}`;
     updateCanvasDisplaySize();
   }
 
@@ -1138,15 +1136,20 @@
     commit(state.tool === 'eraser' ? 'Erase layer' : 'Draw layer');
   }
 
-  function resizeCanvas() {
-    const width = clampCanvasNumber(widthInput.value, canvas.width);
-    const height = clampCanvasNumber(heightInput.value, canvas.height);
+  function applyCanvasResize(newWidth, newHeight, offX, offY) {
+    const width = clampCanvasNumber(newWidth, 1);
+    const height = clampCanvasNumber(newHeight, 1);
+    if (width === canvas.width && height === canvas.height) return;
 
     for (const layer of state.layers) {
       const oldCanvas = layer.canvas;
       const nextCanvas = createLayerCanvas(width, height);
-      nextCanvas.getContext('2d').drawImage(oldCanvas, 0, 0);
+      nextCanvas.getContext('2d').drawImage(oldCanvas, offX, offY);
       layer.canvas = nextCanvas;
+      for (const pivot of layer.rig.pivots) {
+        pivot.x += offX;
+        pivot.y += offY;
+      }
     }
 
     setCanvasSize(width, height);
@@ -1156,6 +1159,87 @@
     renderHitboxOverlay();
     renderRigOverlay();
     commit('Resize canvas');
+  }
+
+  function initResizeHandles() {
+    let dragEdge = null;
+    let startX = 0, startY = 0;
+    let startW = 0, startH = 0;
+    let pending = null;
+
+    function calcResize(e) {
+      const dx = Math.round((e.clientX - startX) / state.zoom);
+      const dy = Math.round((e.clientY - startY) / state.zoom);
+      let newW = startW, newH = startH, offX = 0, offY = 0;
+
+      if (dragEdge.includes('e')) newW = Math.max(1, startW + dx);
+      if (dragEdge.includes('s')) newH = Math.max(1, startH + dy);
+      if (dragEdge.includes('w')) { const added = Math.max(0, -dx); newW = startW + added; offX = added; }
+      if (dragEdge.includes('n')) { const added = Math.max(0, -dy); newH = startH + added; offY = added; }
+
+      return { newW, newH, offX, offY };
+    }
+
+    let resizePreview = null;
+
+    function showPreview(newW, newH, offX, offY) {
+      if (!resizePreview) {
+        resizePreview = document.createElement('div');
+        resizePreview.className = 'resize-preview';
+        canvasFrame.appendChild(resizePreview);
+      }
+      resizePreview.style.width = `${newW * state.zoom}px`;
+      resizePreview.style.height = `${newH * state.zoom}px`;
+      resizePreview.style.left = `${-offX * state.zoom}px`;
+      resizePreview.style.top = `${-offY * state.zoom}px`;
+    }
+
+    function removePreview() {
+      if (resizePreview) {
+        resizePreview.remove();
+        resizePreview = null;
+      }
+    }
+
+    function onPointerMove(e) {
+      if (!dragEdge) return;
+      pending = calcResize(e);
+      canvasSizeDisplay.textContent = `${pending.newW} x ${pending.newH}`;
+      showPreview(pending.newW, pending.newH, pending.offX, pending.offY);
+    }
+
+    function onPointerUp() {
+      if (!dragEdge) return;
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      removePreview();
+      if (pending) {
+        applyCanvasResize(pending.newW, pending.newH, pending.offX, pending.offY);
+      } else {
+        updateCanvasDisplaySize();
+      }
+      dragEdge = null;
+      pending = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    for (const handle of resizeHandles) {
+      handle.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragEdge = handle.dataset.edge;
+        startX = e.clientX;
+        startY = e.clientY;
+        startW = canvas.width;
+        startH = canvas.height;
+        document.body.style.cursor = getComputedStyle(handle).cursor;
+        document.body.style.userSelect = 'none';
+        document.addEventListener('pointermove', onPointerMove);
+        document.addEventListener('pointerup', onPointerUp);
+      });
+    }
   }
 
   function addLayer() {
@@ -1359,7 +1443,7 @@
   zoomInput.addEventListener('input', () => setZoom(zoomInput.value));
   fitZoomButton.addEventListener('click', fitZoomToWorkspace);
   guideSizeSelect.addEventListener('change', () => setGuideSize(guideSizeSelect.value));
-  resizeButton.addEventListener('click', resizeCanvas);
+  initResizeHandles();
   saveButton.addEventListener('click', () => vscode.postMessage({ type: 'save' }));
   syncCharacterButton.addEventListener('click', () => vscode.postMessage({ type: 'syncCharacter' }));
   colorInput.addEventListener('input', renderPaletteSwatches);

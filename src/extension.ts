@@ -304,7 +304,7 @@ function normalizePngUri(uri: vscode.Uri): vscode.Uri | undefined {
 }
 
 class PixelDocument implements vscode.CustomDocument {
-  private readonly onDidChangeContentEmitter = new vscode.EventEmitter<Uint8Array>();
+  private readonly onDidChangeContentEmitter = new vscode.EventEmitter<vscode.WebviewPanel | undefined>();
   private disposed = false;
   private bytes: Uint8Array;
 
@@ -318,15 +318,13 @@ class PixelDocument implements vscode.CustomDocument {
     return this.bytes;
   }
 
-  public update(bytes: Uint8Array, notifyWebviews = true) {
+  public update(bytes: Uint8Array, source?: vscode.WebviewPanel) {
     if (this.disposed) {
       return;
     }
 
     this.bytes = bytes;
-    if (notifyWebviews) {
-      this.onDidChangeContentEmitter.fire(bytes);
-    }
+    this.onDidChangeContentEmitter.fire(source);
   }
 
   public dispose(): void {
@@ -378,7 +376,11 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
       });
     };
 
-    const changeSubscription = document.onDidChangeContent(() => void postDocument());
+    const changeSubscription = document.onDidChangeContent((source) => {
+      if (source !== webviewPanel) {
+        void postDocument();
+      }
+    });
     webviewPanel.onDidDispose(() => changeSubscription.dispose());
 
     webviewPanel.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
@@ -391,7 +393,7 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
           if (!message.dataUri) {
             return;
           }
-          await this.applyEdit(document, message.dataUri, message.label ?? 'Edit pixels', message.layerState);
+          await this.applyEdit(document, message.dataUri, message.label ?? 'Edit pixels', message.layerState, webviewPanel);
           return;
 
         case 'save':
@@ -446,7 +448,13 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
     };
   }
 
-  private async applyEdit(document: PixelDocument, dataUri: string, label: string, layerState?: LayerStateFile) {
+  private async applyEdit(
+    document: PixelDocument,
+    dataUri: string,
+    label: string,
+    layerState: LayerStateFile | undefined,
+    sourcePanel: vscode.WebviewPanel
+  ) {
     const nextBytes = decodePngDataUri(dataUri);
     if (!nextBytes) {
       vscode.window.showErrorMessage('Pixel Editor could not read the edited PNG data.');
@@ -458,7 +466,7 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
     }
 
     const previousBytes = document.data;
-    document.update(nextBytes, false);
+    document.update(nextBytes, sourcePanel);
 
     this.onDidChangeCustomDocumentEmitter.fire({
       document,
@@ -538,10 +546,7 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
       </section>
 
       <section class="tool-group" aria-label="Canvas size">
-        <input id="widthInput" class="number-input" type="number" min="1" max="1024" value="32" title="Canvas width">
-        <span class="separator">x</span>
-        <input id="heightInput" class="number-input" type="number" min="1" max="1024" value="32" title="Canvas height">
-        <button id="resizeButton" class="text-button" type="button">Resize</button>
+        <output id="canvasSizeDisplay" class="metric" title="Canvas size">32 x 32</output>
       </section>
 
       <section class="tool-group" aria-label="Hitbox">
@@ -575,6 +580,14 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
           <svg id="hitboxOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
           <svg id="rigOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
           <div id="cursorOverlay" class="cursor-overlay" aria-hidden="true" hidden></div>
+          <div class="resize-handle" data-edge="n" aria-hidden="true"></div>
+          <div class="resize-handle" data-edge="s" aria-hidden="true"></div>
+          <div class="resize-handle" data-edge="e" aria-hidden="true"></div>
+          <div class="resize-handle" data-edge="w" aria-hidden="true"></div>
+          <div class="resize-handle" data-edge="nw" aria-hidden="true"></div>
+          <div class="resize-handle" data-edge="ne" aria-hidden="true"></div>
+          <div class="resize-handle" data-edge="sw" aria-hidden="true"></div>
+          <div class="resize-handle" data-edge="se" aria-hidden="true"></div>
         </div>
       </section>
 
