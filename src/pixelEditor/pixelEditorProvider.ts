@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { deleteCollisionPolygon, readCollisionPolygon, writeCollisionPolygon } from '../collisionShape';
-import { LayerStateFile, readLayerState, writeLayerState } from '../layerState';
+import { deleteLayerState, LayerStateFile, readLayerState, writeLayerState } from '../layerState';
 import { decodePngDataUri } from '../shared/png';
 import { confirmOverwrite, pickNonConflictingUri } from '../shared/uri';
 import { WebviewMessage } from '../shared/types';
@@ -23,7 +23,8 @@ export class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDoc
   ): Promise<PixelDocument> {
     const source = openContext.backupId ? vscode.Uri.parse(openContext.backupId) : uri;
     const bytes = await vscode.workspace.fs.readFile(source);
-    return new PixelDocument(uri, bytes);
+    const layerState = await readLayerState(uri);
+    return new PixelDocument(uri, bytes, layerState);
   }
 
   public async resolveCustomEditor(
@@ -41,14 +42,13 @@ export class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDoc
 
     const postDocument = async () => {
       const collisionPoints = await readCollisionPolygon(document.uri);
-      const layerState = await readLayerState(document.uri);
       const mimeType = getImageMimeType(document.uri);
       webviewPanel.webview.postMessage({
         type: 'init',
         filename: path.basename(document.uri.path),
         dataUri: `data:${mimeType};base64,${Buffer.from(document.data).toString('base64')}`,
         collisionPoints,
-        layerState
+        layerState: document.currentLayerState
       });
     };
 
@@ -118,7 +118,8 @@ export class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDoc
 
   public async revertCustomDocument(document: PixelDocument, _cancellation: vscode.CancellationToken): Promise<void> {
     const bytes = await vscode.workspace.fs.readFile(document.uri);
-    document.update(bytes);
+    const layerState = await readLayerState(document.uri);
+    document.update(bytes, layerState);
   }
 
   public async backupCustomDocument(
@@ -153,19 +154,32 @@ export class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDoc
       return;
     }
 
-    if (layerState) {
-      await writeLayerState(document.uri, layerState);
-    }
-
     const previousBytes = document.data;
-    document.update(nextBytes, sourcePanel);
+    const previousLayerState = document.currentLayerState;
+
+    await this.persistLayerState(document.uri, layerState);
+    document.update(nextBytes, layerState, sourcePanel);
 
     this.onDidChangeCustomDocumentEmitter.fire({
       document,
       label,
-      undo: async () => document.update(previousBytes),
-      redo: async () => document.update(nextBytes)
+      undo: async () => {
+        await this.persistLayerState(document.uri, previousLayerState);
+        document.update(previousBytes, previousLayerState);
+      },
+      redo: async () => {
+        await this.persistLayerState(document.uri, layerState);
+        document.update(nextBytes, layerState);
+      }
     });
+  }
+
+  private async persistLayerState(uri: vscode.Uri, layerState: LayerStateFile | undefined): Promise<void> {
+    if (layerState) {
+      await writeLayerState(uri, layerState);
+    } else {
+      await deleteLayerState(uri);
+    }
   }
 
   private async saveCollision(pngUri: vscode.Uri, points: number[]): Promise<void> {
