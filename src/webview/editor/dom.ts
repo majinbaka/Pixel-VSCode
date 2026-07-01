@@ -1,3 +1,5 @@
+import { byId } from '../domUtil';
+
 export interface Elements {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -44,14 +46,6 @@ export interface Elements {
   selectionMoveButton: HTMLButtonElement;
   selectionCutButton: HTMLButtonElement;
   selectionClearButton: HTMLButtonElement;
-}
-
-function byId<T extends Element = HTMLElement>(id: string): T {
-  const element = document.getElementById(id);
-  if (!element) {
-    throw new Error(`Missing element #${id}`);
-  }
-  return element as unknown as T;
 }
 
 export function queryElements(): Elements {

@@ -1,3 +1,5 @@
+import { byId } from '../domUtil';
+
 export interface Elements {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -13,14 +15,6 @@ export interface Elements {
   allDurationInput: HTMLInputElement;
   applyDurationButton: HTMLButtonElement;
   pickFramesButton: HTMLButtonElement;
-}
-
-function byId<T extends HTMLElement>(id: string): T {
-  const el = document.getElementById(id);
-  if (!el) {
-    throw new Error(`Missing element #${id}`);
-  }
-  return el as T;
 }
 
 export function queryElements(): Elements {

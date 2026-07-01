@@ -1,3 +1,5 @@
+import { byId } from '../domUtil';
+
 export interface Elements {
   mapCanvas: HTMLCanvasElement;
   mapContext: CanvasRenderingContext2D;
@@ -17,14 +19,6 @@ export interface Elements {
   addLayerButton: HTMLButtonElement;
   deleteLayerButton: HTMLButtonElement;
   toolButtons: HTMLButtonElement[];
-}
-
-function byId<T extends HTMLElement>(id: string): T {
-  const el = document.getElementById(id);
-  if (!el) {
-    throw new Error(`Missing element #${id}`);
-  }
-  return el as T;
 }
 
 export function queryElements(): Elements {

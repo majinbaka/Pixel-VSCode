@@ -1,13 +1,15 @@
 "use strict";
 (() => {
-  // src/webview/mapEditor/dom.ts
+  // src/webview/domUtil.ts
   function byId(id) {
-    const el = document.getElementById(id);
-    if (!el) {
+    const element = document.getElementById(id);
+    if (!element) {
       throw new Error(`Missing element #${id}`);
     }
-    return el;
+    return element;
   }
+
+  // src/webview/mapEditor/dom.ts
   function queryElements() {
     const mapCanvas = byId("mapCanvas");
     const paletteCanvas = byId("paletteCanvas");

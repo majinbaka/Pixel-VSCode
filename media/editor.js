@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // src/webview/editor/dom.ts
+  // src/webview/domUtil.ts
   function byId(id) {
     const element = document.getElementById(id);
     if (!element) {
@@ -8,6 +8,8 @@
     }
     return element;
   }
+
+  // src/webview/editor/dom.ts
   function queryElements() {
     const canvas = byId("pixelCanvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true });

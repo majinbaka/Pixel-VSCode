@@ -17,22 +17,7 @@ export async function openAnimationPreview(
     return;
   }
 
-  const durationInput = await vscode.window.showInputBox({
-    title: 'Pixel Animation Preview',
-    prompt: `Frame duration in milliseconds. Enter one value for all ${frameUris.length} frames, or ${frameUris.length} comma-separated values.`,
-    value: '120',
-    validateInput(value) {
-      return parseFrameDurations(value, frameUris.length)
-        ? undefined
-        : `Use one duration or exactly ${frameUris.length} comma-separated durations, from 20 to 10000 ms.`;
-    }
-  });
-
-  if (!durationInput) {
-    return;
-  }
-
-  const durations = parseFrameDurations(durationInput, frameUris.length);
+  const durations = await askFrameDurations(frameUris.length);
   if (!durations) {
     return;
   }
@@ -74,24 +59,8 @@ async function replaceAnimationFrames(panel: vscode.WebviewPanel): Promise<void>
     return;
   }
 
-  const durationInput = await vscode.window.showInputBox({
-    title: 'Pixel Animation Preview',
-    prompt: `Frame duration in milliseconds. Enter one value for all ${frameUris.length} frames, or ${frameUris.length} comma-separated values.`,
-    value: '120',
-    validateInput(value) {
-      return parseFrameDurations(value, frameUris.length)
-        ? undefined
-        : `Use one duration or exactly ${frameUris.length} comma-separated durations, from 20 to 10000 ms.`;
-    }
-  });
-
-  if (!durationInput) {
-    return;
-  }
-
-  const durations = parseFrameDurations(durationInput, frameUris.length);
+  const durations = await askFrameDurations(frameUris.length);
   if (!durations) {
-    vscode.window.showWarningMessage(`Use one duration or exactly ${frameUris.length} comma-separated durations.`);
     return;
   }
 
@@ -99,6 +68,25 @@ async function replaceAnimationFrames(panel: vscode.WebviewPanel): Promise<void>
     type: 'init',
     frames: await readAnimationFrames(frameUris, durations)
   });
+}
+
+async function askFrameDurations(frameCount: number): Promise<number[] | undefined> {
+  const durationInput = await vscode.window.showInputBox({
+    title: 'Pixel Animation Preview',
+    prompt: `Frame duration in milliseconds. Enter one value for all ${frameCount} frames, or ${frameCount} comma-separated values.`,
+    value: '120',
+    validateInput(value) {
+      return parseFrameDurations(value, frameCount)
+        ? undefined
+        : `Use one duration or exactly ${frameCount} comma-separated durations, from 20 to 10000 ms.`;
+    }
+  });
+
+  if (!durationInput) {
+    return undefined;
+  }
+
+  return parseFrameDurations(durationInput, frameCount);
 }
 
 async function pickAnimationFrames(): Promise<vscode.Uri[] | undefined> {
