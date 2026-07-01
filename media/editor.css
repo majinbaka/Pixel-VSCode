@@ -334,6 +334,24 @@ button:disabled {
   pointer-events: none;
 }
 
+.selection-overlay {
+  z-index: 6;
+}
+
+.selection-drag-canvas {
+  position: absolute;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+  z-index: 7;
+  opacity: 0.9;
+  border: 1px dashed rgba(100, 160, 255, 0.8);
+}
+
+.selection-drag-canvas[hidden] {
+  display: none;
+}
+
 .cursor-overlay {
   position: absolute;
   box-sizing: border-box;

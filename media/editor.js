@@ -40,6 +40,11 @@
   const resetRigButton = document.getElementById('resetRigButton');
   const addPivotButton = document.getElementById('addPivotButton');
   const pivotsList = document.getElementById('pivotsList');
+  const selectionOverlay = document.getElementById('selectionOverlay');
+  const selectionDragCanvas = document.getElementById('selectionDragCanvas');
+  const selectionMoveButton = document.getElementById('selectionMoveButton');
+  const selectionCutButton = document.getElementById('selectionCutButton');
+  const selectionClearButton = document.getElementById('selectionClearButton');
 
   const palettes = [
     {
@@ -104,21 +109,49 @@
     },
     rig: {
       dragMode: undefined
+    },
+    selection: {
+      active: false,
+      shape: 'rect',
+      x: 0, y: 0, w: 0, h: 0,
+      lassoPoints: [],
+      isDrawing: false,
+      startX: 0, startY: 0,
+      isDraggingContent: false,
+      dragOffX: 0, dragOffY: 0,
+      floatCanvas: null,
+      floatX: 0, floatY: 0
     }
   };
 
   function setTool(tool) {
+    if (state.tool !== tool && isSelectionTool(state.tool)) {
+      flattenSelection();
+    }
     state.tool = tool;
     for (const button of toolButtons) {
       button.classList.toggle('active', button.dataset.tool === tool);
     }
-    canvas.style.cursor = tool === 'picker' ? 'copy' : 'crosshair';
+    if (tool === 'picker') {
+      canvas.style.cursor = 'copy';
+    } else if (isSelectionTool(tool)) {
+      canvas.style.cursor = 'crosshair';
+    } else {
+      canvas.style.cursor = 'crosshair';
+    }
     const layer = getActiveLayer();
     if (tool === 'rig' && layer) {
       updateRigAngleInput(layer);
       renderPivotsPanel();
     }
     renderRigOverlay();
+    if (!isSelectionTool(tool)) {
+      clearSelection();
+    }
+  }
+
+  function isSelectionTool(tool) {
+    return tool === 'select-rect' || tool === 'select-ellipse' || tool === 'select-lasso';
   }
 
   function updateCanvasDisplaySize() {
@@ -136,6 +169,7 @@
     updateCanvasDisplaySize();
     renderHitboxOverlay();
     renderRigOverlay();
+    renderSelectionOverlay();
   }
 
   function fitZoomToWorkspace() {
@@ -408,6 +442,363 @@
       renderHitboxOverlay();
     }
   }
+
+  // ── Selection ──────────────────────────────────────────────────────────────
+
+  function clearSelection() {
+    state.selection.active = false;
+    state.selection.isDrawing = false;
+    state.selection.isDraggingContent = false;
+    state.selection.lassoPoints = [];
+    state.selection.floatCanvas = null;
+    renderSelectionOverlay();
+    updateSelectionButtons();
+  }
+
+  function updateSelectionButtons() {
+    const has = state.selection.active;
+    selectionMoveButton.disabled = !has;
+    selectionCutButton.disabled = !has;
+    selectionClearButton.disabled = !has;
+  }
+
+  function selectionPath2D() {
+    const sel = state.selection;
+    const path = new Path2D();
+    if (sel.shape === 'lasso') {
+      if (sel.lassoPoints.length < 2) return path;
+      path.moveTo(sel.lassoPoints[0].x, sel.lassoPoints[0].y);
+      for (let i = 1; i < sel.lassoPoints.length; i++) {
+        path.lineTo(sel.lassoPoints[i].x, sel.lassoPoints[i].y);
+      }
+      path.closePath();
+    } else if (sel.shape === 'ellipse') {
+      const cx = sel.x + sel.w / 2;
+      const cy = sel.y + sel.h / 2;
+      path.ellipse(cx, cy, Math.abs(sel.w / 2), Math.abs(sel.h / 2), 0, 0, Math.PI * 2);
+    } else {
+      path.rect(sel.x, sel.y, sel.w, sel.h);
+    }
+    return path;
+  }
+
+  function applySelectionMask(targetCtx) {
+    const sel = state.selection;
+    targetCtx.save();
+    if (sel.shape === 'lasso') {
+      if (sel.lassoPoints.length < 2) { targetCtx.restore(); return; }
+      targetCtx.beginPath();
+      targetCtx.moveTo(sel.lassoPoints[0].x, sel.lassoPoints[0].y);
+      for (let i = 1; i < sel.lassoPoints.length; i++) {
+        targetCtx.lineTo(sel.lassoPoints[i].x, sel.lassoPoints[i].y);
+      }
+      targetCtx.closePath();
+    } else if (sel.shape === 'ellipse') {
+      const cx = sel.x + sel.w / 2;
+      const cy = sel.y + sel.h / 2;
+      targetCtx.beginPath();
+      targetCtx.ellipse(cx, cy, Math.abs(sel.w / 2), Math.abs(sel.h / 2), 0, 0, Math.PI * 2);
+    } else {
+      targetCtx.beginPath();
+      targetCtx.rect(sel.x, sel.y, sel.w, sel.h);
+    }
+    targetCtx.clip();
+  }
+
+  function liftSelection() {
+    const sel = state.selection;
+    if (sel.floatCanvas) return;
+    const layer = getActiveLayer();
+    if (!layer) return;
+
+    const bounds = selectionBounds();
+    const floatW = bounds.x2 - bounds.x1;
+    const floatH = bounds.y2 - bounds.y1;
+    if (floatW <= 0 || floatH <= 0) return;
+
+    const floatCanvas = createLayerCanvas(floatW, floatH);
+    const floatCtx = floatCanvas.getContext('2d');
+    floatCtx.save();
+    floatCtx.translate(-bounds.x1, -bounds.y1);
+    applySelectionMask(floatCtx);
+    floatCtx.drawImage(layer.canvas, 0, 0);
+    floatCtx.restore();
+
+    const layerCtx = layer.canvas.getContext('2d', { willReadFrequently: true });
+    layerCtx.save();
+    applySelectionMask(layerCtx);
+    layerCtx.clearRect(0, 0, canvas.width, canvas.height);
+    layerCtx.restore();
+
+    sel.floatCanvas = floatCanvas;
+    sel.floatX = bounds.x1;
+    sel.floatY = bounds.y1;
+
+    renderComposite();
+  }
+
+  function flattenSelection() {
+    const sel = state.selection;
+    if (!sel.floatCanvas) { clearSelection(); return; }
+    const layer = getActiveLayer();
+    if (!layer) { clearSelection(); return; }
+
+    const layerCtx = layer.canvas.getContext('2d', { willReadFrequently: true });
+    layerCtx.drawImage(sel.floatCanvas, sel.floatX, sel.floatY);
+    renderComposite();
+    commit('Move selection');
+    clearSelection();
+  }
+
+  function selectionBounds() {
+    const sel = state.selection;
+    if (sel.shape === 'lasso') {
+      if (!sel.lassoPoints.length) return { x1: 0, y1: 0, x2: 0, y2: 0 };
+      let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+      for (const p of sel.lassoPoints) {
+        if (p.x < x1) x1 = p.x;
+        if (p.y < y1) y1 = p.y;
+        if (p.x > x2) x2 = p.x;
+        if (p.y > y2) y2 = p.y;
+      }
+      return { x1: Math.floor(x1), y1: Math.floor(y1), x2: Math.ceil(x2), y2: Math.ceil(y2) };
+    }
+    const x1 = sel.w >= 0 ? sel.x : sel.x + sel.w;
+    const y1 = sel.h >= 0 ? sel.y : sel.y + sel.h;
+    const x2 = sel.w >= 0 ? sel.x + sel.w : sel.x;
+    const y2 = sel.h >= 0 ? sel.y + sel.h : sel.y;
+    return { x1: Math.floor(x1), y1: Math.floor(y1), x2: Math.ceil(x2), y2: Math.ceil(y2) };
+  }
+
+  function isInsideSelection(x, y) {
+    const sel = state.selection;
+    if (!sel.active) return false;
+    if (sel.shape === 'lasso') {
+      return pointInPolygon(x, y, sel.lassoPoints);
+    }
+    const b = selectionBounds();
+    if (x < b.x1 || x >= b.x2 || y < b.y1 || y >= b.y2) return false;
+    if (sel.shape === 'ellipse') {
+      const cx = (b.x1 + b.x2) / 2;
+      const cy = (b.y1 + b.y2) / 2;
+      const rx = (b.x2 - b.x1) / 2;
+      const ry = (b.y2 - b.y1) / 2;
+      if (rx <= 0 || ry <= 0) return false;
+      return ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+    }
+    return true;
+  }
+
+  function pointInPolygon(x, y, pts) {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const xi = pts[i].x, yi = pts[i].y;
+      const xj = pts[j].x, yj = pts[j].y;
+      const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function cutSelection() {
+    const sel = state.selection;
+    if (!sel.active) return;
+    if (!sel.floatCanvas) liftSelection();
+    sel.floatCanvas = null;
+    renderComposite();
+    commit('Cut selection');
+    clearSelection();
+  }
+
+  function startMoveSelection(x, y) {
+    const sel = state.selection;
+    if (!sel.active) return false;
+    if (!isInsideSelection(x, y)) return false;
+    if (!sel.floatCanvas) liftSelection();
+    sel.isDraggingContent = true;
+    sel.dragOffX = x - sel.floatX;
+    sel.dragOffY = y - sel.floatY;
+    return true;
+  }
+
+  function moveDragSelection(x, y) {
+    const sel = state.selection;
+    if (!sel.isDraggingContent) return;
+    const newX = x - sel.dragOffX;
+    const newY = y - sel.dragOffY;
+    const dx = newX - sel.floatX;
+    const dy = newY - sel.floatY;
+    sel.floatX = newX;
+    sel.floatY = newY;
+    if (sel.shape === 'lasso') {
+      for (const p of sel.lassoPoints) { p.x += dx; p.y += dy; }
+    } else {
+      sel.x += dx;
+      sel.y += dy;
+    }
+    renderSelectionOverlay();
+    renderCompositeWithFloat();
+  }
+
+  function renderCompositeWithFloat() {
+    renderComposite();
+    const sel = state.selection;
+    if (sel.floatCanvas) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sel.floatCanvas, sel.floatX, sel.floatY);
+      ctx.restore();
+    }
+  }
+
+  function handleSelectionPointerDown(x, y) {
+    const sel = state.selection;
+    if (sel.active && isInsideSelection(x, y)) {
+      startMoveSelection(x, y);
+      return;
+    }
+    if (sel.active) flattenSelection();
+    sel.isDrawing = true;
+    sel.startX = x;
+    sel.startY = y;
+    sel.active = false;
+    sel.lassoPoints = sel.shape === 'lasso' ? [{ x, y }] : [];
+    sel.x = x; sel.y = y; sel.w = 0; sel.h = 0;
+    renderSelectionOverlay();
+    updateSelectionButtons();
+  }
+
+  function handleSelectionPointerMove(x, y) {
+    const sel = state.selection;
+    if (sel.isDraggingContent) {
+      moveDragSelection(x, y);
+      return;
+    }
+    if (!sel.isDrawing) return;
+    if (sel.shape === 'lasso') {
+      sel.lassoPoints.push({ x, y });
+    } else {
+      sel.w = x - sel.startX;
+      sel.h = y - sel.startY;
+    }
+    renderSelectionOverlay();
+  }
+
+  function handleSelectionPointerUp(x, y) {
+    const sel = state.selection;
+    if (sel.isDraggingContent) {
+      sel.isDraggingContent = false;
+      return;
+    }
+    if (!sel.isDrawing) return;
+    sel.isDrawing = false;
+
+    if (sel.shape === 'lasso') {
+      if (sel.lassoPoints.length >= 3) {
+        sel.active = true;
+      } else {
+        sel.lassoPoints = [];
+      }
+    } else {
+      sel.w = x - sel.startX;
+      sel.h = y - sel.startY;
+      sel.active = Math.abs(sel.w) >= 1 && Math.abs(sel.h) >= 1;
+    }
+
+    renderSelectionOverlay();
+    updateSelectionButtons();
+  }
+
+  function renderSelectionOverlay() {
+    if (!state.ready) return;
+    selectionOverlay.setAttribute('viewBox', `0 0 ${canvas.width} ${canvas.height}`);
+    selectionOverlay.replaceChildren();
+
+    if (selectionDragCanvas) {
+      selectionDragCanvas.hidden = true;
+    }
+
+    const sel = state.selection;
+    if (!sel.active && !sel.isDrawing) return;
+
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+    pattern.setAttribute('id', 'marching-ants');
+    pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+    const pxSize = Math.max(0.5, 1 / state.zoom);
+    pattern.setAttribute('width', String(pxSize * 4));
+    pattern.setAttribute('height', String(pxSize * 4));
+    const r1 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    r1.setAttribute('width', String(pxSize * 4));
+    r1.setAttribute('height', String(pxSize * 4));
+    r1.setAttribute('fill', 'white');
+    const r2 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    r2.setAttribute('width', String(pxSize * 2));
+    r2.setAttribute('height', String(pxSize * 2));
+    r2.setAttribute('fill', 'black');
+    pattern.append(r1, r2);
+    defs.append(pattern);
+    selectionOverlay.append(defs);
+
+    const strokeW = Math.max(0.5, 1 / state.zoom);
+
+    if (sel.shape === 'lasso' && sel.lassoPoints.length >= 2) {
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      poly.setAttribute('points', sel.lassoPoints.map((p) => `${p.x},${p.y}`).join(' '));
+      poly.setAttribute('fill', 'rgba(100,160,255,0.15)');
+      poly.setAttribute('stroke', 'url(#marching-ants)');
+      poly.setAttribute('stroke-width', String(strokeW));
+      if (sel.active) {
+        poly.setAttribute('points', sel.lassoPoints.map((p) => `${p.x},${p.y}`).join(' ') + ` ${sel.lassoPoints[0].x},${sel.lassoPoints[0].y}`);
+      }
+      selectionOverlay.append(poly);
+    } else if (sel.shape === 'ellipse') {
+      const b = selectionBounds();
+      const cx = (b.x1 + b.x2) / 2;
+      const cy = (b.y1 + b.y2) / 2;
+      const rx = (b.x2 - b.x1) / 2;
+      const ry = (b.y2 - b.y1) / 2;
+      if (rx > 0 && ry > 0) {
+        const ellipse = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+        ellipse.setAttribute('cx', String(cx));
+        ellipse.setAttribute('cy', String(cy));
+        ellipse.setAttribute('rx', String(rx));
+        ellipse.setAttribute('ry', String(ry));
+        ellipse.setAttribute('fill', 'rgba(100,160,255,0.15)');
+        ellipse.setAttribute('stroke', 'url(#marching-ants)');
+        ellipse.setAttribute('stroke-width', String(strokeW));
+        selectionOverlay.append(ellipse);
+      }
+    } else if (sel.shape === 'rect') {
+      const b = selectionBounds();
+      const w = b.x2 - b.x1;
+      const h = b.y2 - b.y1;
+      if (w > 0 && h > 0) {
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', String(b.x1));
+        rect.setAttribute('y', String(b.y1));
+        rect.setAttribute('width', String(w));
+        rect.setAttribute('height', String(h));
+        rect.setAttribute('fill', 'rgba(100,160,255,0.15)');
+        rect.setAttribute('stroke', 'url(#marching-ants)');
+        rect.setAttribute('stroke-width', String(strokeW));
+        selectionOverlay.append(rect);
+      }
+    }
+
+    if (sel.floatCanvas) {
+      selectionDragCanvas.width = sel.floatCanvas.width;
+      selectionDragCanvas.height = sel.floatCanvas.height;
+      selectionDragCanvas.getContext('2d').drawImage(sel.floatCanvas, 0, 0);
+      selectionDragCanvas.style.left = `${sel.floatX * state.zoom}px`;
+      selectionDragCanvas.style.top = `${sel.floatY * state.zoom}px`;
+      selectionDragCanvas.style.width = `${sel.floatCanvas.width * state.zoom}px`;
+      selectionDragCanvas.style.height = `${sel.floatCanvas.height * state.zoom}px`;
+      selectionDragCanvas.hidden = false;
+    }
+  }
+
+  // ── End Selection ──────────────────────────────────────────────────────────
 
   function renderHitboxOverlay() {
     if (!state.ready) {
@@ -854,7 +1245,7 @@
   }
 
   function updateCursorOverlay(x, y) {
-    if (state.tool === 'hitbox' || state.tool === 'rig') {
+    if (state.tool === 'hitbox' || state.tool === 'rig' || isSelectionTool(state.tool)) {
       hideCursorOverlay();
       return;
     }
@@ -1042,6 +1433,12 @@
       return;
     }
 
+    if (isSelectionTool(state.tool)) {
+      state.selection.shape = state.tool === 'select-rect' ? 'rect' : state.tool === 'select-ellipse' ? 'ellipse' : 'lasso';
+      handleSelectionPointerDown(screenPoint.x, screenPoint.y);
+      return;
+    }
+
     if (state.tool === 'picker') {
       pickColor(screenPoint.x, screenPoint.y);
       return;
@@ -1089,6 +1486,12 @@
       return;
     }
 
+    if (isSelectionTool(state.tool)) {
+      const screenPoint = eventToPixel(event);
+      handleSelectionPointerMove(screenPoint.x, screenPoint.y);
+      return;
+    }
+
     if (!state.drawing || !layerPoint) {
       return;
     }
@@ -1123,6 +1526,13 @@
           commit('Rotate layer');
         }
       }
+      return;
+    }
+
+    if (isSelectionTool(state.tool)) {
+      const screenPoint = eventToPixel(event);
+      handleSelectionPointerUp(screenPoint.x, screenPoint.y);
+      state.pointerId = undefined;
       return;
     }
 
@@ -1460,6 +1870,16 @@
     toggleGridButton.classList.toggle('active', canvasFrame.classList.contains('grid'));
   });
 
+  selectionMoveButton.addEventListener('click', () => {
+    if (!state.selection.active) return;
+    if (!state.selection.floatCanvas) liftSelection();
+    renderSelectionOverlay();
+  });
+  selectionCutButton.addEventListener('click', cutSelection);
+  selectionClearButton.addEventListener('click', () => {
+    flattenSelection();
+  });
+
   autoTraceButton.addEventListener('click', autoTraceHitbox);
   clearHitboxButton.addEventListener('click', () => {
     state.collision.points = [];
@@ -1481,6 +1901,14 @@
   canvas.addEventListener('pointerleave', (event) => {
     stopDrawing(event);
     hideCursorOverlay();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (isSelectionTool(state.tool) && state.selection.active) {
+      if (event.key === 'Escape') { flattenSelection(); event.preventDefault(); }
+      if (event.key === 'Delete' || event.key === 'Backspace') { cutSelection(); event.preventDefault(); }
+    }
   });
   canvas.addEventListener('contextmenu', (event) => {
     if (state.tool !== 'hitbox') {

@@ -520,6 +520,15 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
         <button class="icon-button" type="button" data-tool="picker" title="Color picker" aria-label="Color picker">💧</button>
       </section>
 
+      <section class="tool-group" aria-label="Selection">
+        <button class="icon-button" type="button" data-tool="select-rect" title="Rectangular Selection: drag to select a region" aria-label="Rectangular selection">▭</button>
+        <button class="icon-button" type="button" data-tool="select-ellipse" title="Ellipse Selection: drag to select an ellipse region" aria-label="Ellipse selection">◯</button>
+        <button class="icon-button" type="button" data-tool="select-lasso" title="Lasso Selection: draw a freehand closed shape to select" aria-label="Lasso selection">🪢</button>
+        <button id="selectionMoveButton" class="text-button" type="button" title="Move the selected region (or press M)" disabled>Move</button>
+        <button id="selectionCutButton" class="text-button" type="button" title="Cut the selected region (or press Delete)" disabled>Cut</button>
+        <button id="selectionClearButton" class="text-button" type="button" title="Clear selection (or press Escape)" disabled>Deselect</button>
+      </section>
+
       <section class="tool-group" aria-label="Brush">
         <label class="compact-label" for="colorInput">Color</label>
         <input id="colorInput" class="color-input" type="color" value="#2f80ed" title="Color">
@@ -579,6 +588,8 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
           <canvas id="pixelCanvas" class="pixel-canvas" aria-label="Pixel canvas"></canvas>
           <svg id="hitboxOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
           <svg id="rigOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
+          <svg id="selectionOverlay" class="hitbox-overlay selection-overlay" aria-hidden="true"></svg>
+          <canvas id="selectionDragCanvas" class="selection-drag-canvas" aria-hidden="true" hidden></canvas>
           <div id="cursorOverlay" class="cursor-overlay" aria-hidden="true" hidden></div>
           <div class="resize-handle" data-edge="n" aria-hidden="true"></div>
           <div class="resize-handle" data-edge="s" aria-hidden="true"></div>
