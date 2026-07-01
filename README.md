@@ -2,6 +2,8 @@
 
 VS Code pixel editor with native export workflows for the Godot project.
 
+![Image 1](.vscode/exm1.png)
+
 ## Features
 
 - Create a blank pixel PNG from the command palette with `Pixel: New Pixel Image`.
