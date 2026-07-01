@@ -30,13 +30,13 @@ export async function confirmOverwrite(uri: vscode.Uri): Promise<'overwrite' | '
   return 'cancel';
 }
 
-export async function pickNonConflictingUri(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
+export async function pickNonConflictingUri(uri: vscode.Uri, targetExtension = '.png'): Promise<vscode.Uri | undefined> {
   const dir = path.dirname(uri.fsPath);
-  const base = path.basename(uri.fsPath, '.png');
+  const base = path.basename(uri.fsPath, path.extname(uri.fsPath));
   let candidate: vscode.Uri;
   let counter = 1;
   do {
-    candidate = vscode.Uri.file(path.join(dir, `${base}_${counter}.png`));
+    candidate = vscode.Uri.file(path.join(dir, `${base}_${counter}${targetExtension}`));
     counter++;
     try {
       await vscode.workspace.fs.stat(candidate);

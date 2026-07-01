@@ -48,15 +48,17 @@ export async function createNewPixelFile(): Promise<void> {
   await vscode.commands.executeCommand('vscode.openWith', targetUri, PIXEL_EDITOR_VIEW_TYPE);
 }
 
+const OPENABLE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
+
 export async function openWithPixelEditor(resource?: vscode.Uri): Promise<void> {
   const uri = resource ?? vscode.window.activeTextEditor?.document.uri;
   if (!uri) {
-    vscode.window.showWarningMessage('Select a PNG file to open with the Pixel Editor.');
+    vscode.window.showWarningMessage('Select a PNG or JPG file to open with the Pixel Editor.');
     return;
   }
 
-  if (path.extname(uri.path).toLowerCase() !== '.png') {
-    vscode.window.showWarningMessage('Pixel Editor currently saves PNG files only.');
+  if (!OPENABLE_IMAGE_EXTENSIONS.has(path.extname(uri.path).toLowerCase())) {
+    vscode.window.showWarningMessage('Pixel Editor currently opens PNG and JPG files only.');
     return;
   }
 

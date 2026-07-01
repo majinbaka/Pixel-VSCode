@@ -42,10 +42,11 @@ export class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDoc
     const postDocument = async () => {
       const collisionPoints = await readCollisionPolygon(document.uri);
       const layerState = await readLayerState(document.uri);
+      const mimeType = getImageMimeType(document.uri);
       webviewPanel.webview.postMessage({
         type: 'init',
         filename: path.basename(document.uri.path),
-        dataUri: `data:image/png;base64,${Buffer.from(document.data).toString('base64')}`,
+        dataUri: `data:${mimeType};base64,${Buffer.from(document.data).toString('base64')}`,
         collisionPoints,
         layerState
       });
@@ -83,6 +84,18 @@ export class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDoc
   }
 
   public async saveCustomDocument(document: PixelDocument, _cancellation: vscode.CancellationToken): Promise<void> {
+    if (path.extname(document.uri.path).toLowerCase() !== '.png') {
+      const newUri = await pickNonConflictingUri(document.uri, '.png');
+      if (newUri) {
+        await vscode.workspace.fs.writeFile(newUri, document.data);
+        vscode.window.showInformationMessage(
+          `Pixel Editor saved edits as a new PNG file: ${path.basename(newUri.fsPath)}`
+        );
+        await vscode.commands.executeCommand('vscode.openWith', newUri, PIXEL_EDITOR_VIEW_TYPE);
+      }
+      return;
+    }
+
     const confirmed = await confirmOverwrite(document.uri);
     if (confirmed === 'overwrite') {
       await vscode.workspace.fs.writeFile(document.uri, document.data);
@@ -174,4 +187,12 @@ export class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDoc
       vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
     }
   }
+}
+
+function getImageMimeType(uri: vscode.Uri): string {
+  const extension = path.extname(uri.path).toLowerCase();
+  if (extension === '.jpg' || extension === '.jpeg') {
+    return 'image/jpeg';
+  }
+  return 'image/png';
 }
