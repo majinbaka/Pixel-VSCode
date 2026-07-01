@@ -44,7 +44,8 @@
       "Bash(node test_ctx_state_leak.js)",
       "Bash(node full_flow_v2.js)",
       "Bash(cd /tmp/claude-1000/-home-anhnv-Code-pixel-vscode/3ee9b2d0-1dca-4bd5-9ef9-11a0f1655a70/scratchpad && rm -f *.js *.png package*.json && rm -rf node_modules && echo \"cleaned\")",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(git rm *)"
     ],
     "additionalDirectories": [
       "/home/anhnv/Code/pixel-vscode"

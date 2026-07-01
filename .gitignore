@@ -5,3 +5,10 @@ out/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+media/editor.js
+media/editor.js.map
+media/map-editor.js
+media/map-editor.js.map
+media/animation.js
+media/animation.js.map
