@@ -1,7 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { PNG } from 'pngjs';
-import { createPixelMonsterCharacter, syncPixelMonsterCharacter } from './characterAssets';
 import { deleteCollisionPolygon, readCollisionPolygon, writeCollisionPolygon } from './collisionShape';
 import { LayerStateFile, readLayerState, writeLayerState } from './layerState';
 import { createGodotMap, MapEditorProvider } from './mapEditor';
@@ -28,13 +27,9 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('pixelVscode.newFile', () => createNewPixelFile()),
     vscode.commands.registerCommand('pixelVscode.newGodotMap', () => createGodotMap()),
-    vscode.commands.registerCommand('pixelVscode.newPixelMonsterCharacter', () => createPixelMonsterCharacter()),
     vscode.commands.registerCommand('pixelVscode.openEditor', (resource?: vscode.Uri) => openWithPixelEditor(resource)),
     vscode.commands.registerCommand('pixelVscode.previewAnimation', (resource?: vscode.Uri, selectedResources?: vscode.Uri[]) =>
       openAnimationPreview(context, resource, selectedResources)
-    ),
-    vscode.commands.registerCommand('pixelVscode.syncPixelMonsterCharacter', (resource?: vscode.Uri) =>
-      syncPixelMonsterCharacter(resource)
     )
   );
 }
@@ -363,14 +358,12 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
     webviewPanel.webview.html = this.getHtml(webviewPanel.webview);
 
     const postDocument = async () => {
-      const assetProfile = getPixelAssetProfile(document.uri);
       const collisionPoints = await readCollisionPolygon(document.uri);
       const layerState = await readLayerState(document.uri);
       webviewPanel.webview.postMessage({
         type: 'init',
         filename: path.basename(document.uri.path),
         dataUri: `data:image/png;base64,${Buffer.from(document.data).toString('base64')}`,
-        assetProfile,
         collisionPoints,
         layerState
       });
@@ -398,11 +391,6 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
 
         case 'save':
           await vscode.commands.executeCommand('workbench.action.files.save');
-          return;
-
-        case 'syncCharacter':
-          await vscode.commands.executeCommand('workbench.action.files.save');
-          await syncPixelMonsterCharacter(document.uri);
           return;
 
         case 'saveCollision':
@@ -587,7 +575,6 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
 
       <section class="tool-group push" aria-label="File">
         <span id="fileStatus" class="status">pixel.png</span>
-        <button id="syncCharacterButton" class="text-button" type="button" hidden>Sync Pack</button>
         <button id="saveButton" class="text-button primary" type="button">Save</button>
       </section>
     </header>
@@ -633,6 +620,7 @@ class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDocument> 
           <div class="layer-actions">
             <button id="moveLayerUpButton" class="icon-button" type="button" title="Move layer up" aria-label="Move layer up">↑</button>
             <button id="moveLayerDownButton" class="icon-button" type="button" title="Move layer down" aria-label="Move layer down">↓</button>
+            <button id="mergeLayerDownButton" class="icon-button" type="button" title="Merge layer down" aria-label="Merge layer down">⤓</button>
           </div>
           <label class="opacity-control" for="layerOpacity">
             <span class="compact-label">Opacity</span>
@@ -731,32 +719,7 @@ type WebviewMessage =
   | { type: 'ready' }
   | { type: 'edit'; dataUri?: string; label?: string; layerState?: LayerStateFile }
   | { type: 'save' }
-  | { type: 'syncCharacter' }
   | { type: 'saveCollision'; points?: number[] };
-
-type PixelAssetProfile = {
-  kind: 'lpc-action';
-  entityType: 'character' | 'monster';
-  entityId: string;
-  action: string;
-  guideSize: number;
-};
-
-function getPixelAssetProfile(uri: vscode.Uri): PixelAssetProfile | undefined {
-  const normalized = uri.fsPath.replaceAll('\\', '/');
-  const match = normalized.match(/\/lpc_(characters|monsters)_full\/([^/]+)\/([^/]+)\.png$/);
-  if (!match) {
-    return undefined;
-  }
-
-  return {
-    kind: 'lpc-action',
-    entityType: match[1] === 'characters' ? 'character' : 'monster',
-    entityId: match[2],
-    action: match[3],
-    guideSize: 64
-  };
-}
 
 async function confirmOverwrite(uri: vscode.Uri): Promise<'overwrite' | 'saveas' | 'cancel'> {
   let exists = false;

@@ -16,7 +16,6 @@
   const canvasSizeDisplay = document.getElementById('canvasSizeDisplay');
   const resizeHandles = Array.from(document.querySelectorAll('.resize-handle'));
   const saveButton = document.getElementById('saveButton');
-  const syncCharacterButton = document.getElementById('syncCharacterButton');
   const toggleGridButton = document.getElementById('toggleGrid');
   const toggleSnapButton = document.getElementById('toggleSnap');
   const paletteSelect = document.getElementById('paletteSelect');
@@ -27,6 +26,7 @@
   const deleteLayerButton = document.getElementById('deleteLayerButton');
   const moveLayerUpButton = document.getElementById('moveLayerUpButton');
   const moveLayerDownButton = document.getElementById('moveLayerDownButton');
+  const mergeLayerDownButton = document.getElementById('mergeLayerDownButton');
   const layerOpacityInput = document.getElementById('layerOpacity');
   const layerOpacityLabel = document.getElementById('layerOpacityLabel');
   const toolButtons = Array.from(document.querySelectorAll('[data-tool]'));
@@ -103,7 +103,6 @@
     nextPivotId: 1,
     guideSize: 1,
     snapToGuide: false,
-    assetProfile: undefined,
     pendingCollisionPoints: undefined,
     collision: {
       points: [],
@@ -1733,6 +1732,48 @@
     commit('Delete layer');
   }
 
+  function drawLayerInto(targetCtx, layer) {
+    targetCtx.save();
+    targetCtx.globalAlpha = layer.opacity;
+    for (const pivot of layer.rig.pivots) {
+      if (pivot.angle) {
+        targetCtx.translate(pivot.x, pivot.y);
+        targetCtx.rotate(pivot.angle);
+        targetCtx.translate(-pivot.x, -pivot.y);
+      }
+    }
+    targetCtx.drawImage(layer.canvas, 0, 0);
+    targetCtx.restore();
+  }
+
+  function mergeLayerDown() {
+    const index = state.layers.findIndex((layer) => layer.id === state.activeLayerId);
+    if (index <= 0) {
+      return;
+    }
+
+    const activeLayer = state.layers[index];
+    const belowLayer = state.layers[index - 1];
+
+    const mergedCanvas = createLayerCanvas(canvas.width, canvas.height);
+    const mergedCtx = mergedCanvas.getContext('2d');
+    mergedCtx.imageSmoothingEnabled = false;
+    drawLayerInto(mergedCtx, belowLayer);
+    drawLayerInto(mergedCtx, activeLayer);
+
+    belowLayer.canvas = mergedCanvas;
+    belowLayer.opacity = 1;
+    belowLayer.rig.pivots.forEach((pivot) => { pivot.angle = 0; });
+
+    state.layers.splice(index, 1);
+    state.activeLayerId = belowLayer.id;
+    renderLayersPanel();
+    renderComposite();
+    renderPivotsPanel();
+    renderRigOverlay();
+    commit('Merge layer down');
+  }
+
   function moveLayer(offset) {
     const index = state.layers.findIndex((layer) => layer.id === state.activeLayerId);
     const nextIndex = index + offset;
@@ -1844,6 +1885,7 @@
     const activeIndex = state.layers.findIndex((layer) => layer.id === state.activeLayerId);
     moveLayerDownButton.disabled = activeIndex <= 0;
     moveLayerUpButton.disabled = activeIndex === -1 || activeIndex >= state.layers.length - 1;
+    mergeLayerDownButton.disabled = activeIndex <= 0;
   }
 
   function renderPalettes() {
@@ -1889,7 +1931,6 @@
   guideSizeSelect.addEventListener('change', () => setGuideSize(guideSizeSelect.value));
   initResizeHandles();
   saveButton.addEventListener('click', () => vscode.postMessage({ type: 'save' }));
-  syncCharacterButton.addEventListener('click', () => vscode.postMessage({ type: 'syncCharacter' }));
   colorInput.addEventListener('input', renderPaletteSwatches);
   paletteSelect.addEventListener('change', renderPaletteSwatches);
   addLayerButton.addEventListener('click', addLayer);
@@ -1897,6 +1938,7 @@
   deleteLayerButton.addEventListener('click', deleteLayer);
   moveLayerUpButton.addEventListener('click', () => moveLayer(1));
   moveLayerDownButton.addEventListener('click', () => moveLayer(-1));
+  mergeLayerDownButton.addEventListener('click', mergeLayerDown);
   layerOpacityInput.addEventListener('input', () => setActiveLayerOpacity(layerOpacityInput.value, false));
   layerOpacityInput.addEventListener('change', () => setActiveLayerOpacity(layerOpacityInput.value, true));
   toggleGridButton.addEventListener('click', () => {
@@ -1961,12 +2003,7 @@
   window.addEventListener('message', (event) => {
     const message = event.data;
     if (message.type === 'init') {
-      state.assetProfile = message.assetProfile;
       state.pendingCollisionPoints = message.collisionPoints;
-      syncCharacterButton.hidden = message.assetProfile?.kind !== 'lpc-action';
-      if (message.assetProfile?.kind === 'lpc-action') {
-        setGuideSize(message.assetProfile.guideSize);
-      }
       loadLayerState(message.layerState, message.filename).then((loaded) => {
         if (!loaded) {
           loadImage(message.dataUri, message.filename);

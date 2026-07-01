@@ -15,16 +15,7 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCustomEditor:pixelVscode.pixelEditor",
-    "onCustomEditor:pixelVscode.mapEditor",
-    "onCommand:pixelVscode.newFile",
-    "onCommand:pixelVscode.newGodotMap",
-    "onCommand:pixelVscode.newPixelMonsterCharacter",
-    "onCommand:pixelVscode.openEditor",
-    "onCommand:pixelVscode.previewAnimation",
-    "onCommand:pixelVscode.syncPixelMonsterCharacter"
-  ],
+  "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -43,14 +34,6 @@
       {
         "command": "pixelVscode.newGodotMap",
         "title": "Pixel: New Pixel Monster Map"
-      },
-      {
-        "command": "pixelVscode.newPixelMonsterCharacter",
-        "title": "Pixel: New Pixel Monster Character"
-      },
-      {
-        "command": "pixelVscode.syncPixelMonsterCharacter",
-        "title": "Pixel: Validate and Sync Character Pack"
       }
     ],
     "configuration": {
@@ -74,11 +57,6 @@
           "command": "pixelVscode.previewAnimation",
           "when": "resourceExtname == .png",
           "group": "navigation@2"
-        },
-        {
-          "command": "pixelVscode.syncPixelMonsterCharacter",
-          "when": "resourceExtname == .png",
-          "group": "navigation@3"
         }
       ],
       "editor/title/context": [
