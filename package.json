@@ -2,7 +2,7 @@
   "name": "pixel-vscode",
   "displayName": "Pixel VSCode",
   "description": "Create and edit pixel art PNG files directly in VS Code.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "majinbaka",
   "license": "MIT",
   "icon": "pixel-logo.png",
