@@ -1,6 +1,6 @@
 import { Elements } from './dom';
 import { EditorState } from './state';
-import { createLayer, createLayerCanvas, getActiveLayer, renderComposite } from './canvasCore';
+import { createLayer, createLayerCanvas, getActiveLayer, loadImageElement, renderComposite } from './canvasCore';
 import { renderPivotsPanel, renderRigOverlay } from './rig';
 
 type CommitFn = (label: string) => void;
@@ -8,6 +8,42 @@ type CommitFn = (label: string) => void;
 export interface LayersPanelCallbacks {
   onCommit: CommitFn;
   onSetActiveLayer: (id: string) => void;
+}
+
+export async function importLayerImages(
+  el: Elements,
+  state: EditorState,
+  callbacks: LayersPanelCallbacks,
+  images: { name: string; dataUri: string }[]
+): Promise<void> {
+  if (images.length === 0) {
+    return;
+  }
+
+  const loaded = await Promise.all(images.map((image) => loadImageElement(image.dataUri)));
+
+  for (let index = 0; index < loaded.length; index += 1) {
+    const sourceCanvas = createLayerCanvas(el.canvas.width, el.canvas.height);
+    sourceCanvas.getContext('2d')!.drawImage(loaded[index], 0, 0, el.canvas.width, el.canvas.height);
+    const layer = createLayer(el, state, images[index].name.replace(/\.[^.]+$/, ''), sourceCanvas);
+    state.layers.push(layer);
+    state.activeLayerId = layer.id;
+  }
+
+  renderLayersPanel(el, state, callbacks);
+  renderComposite(el, state);
+  renderPivotsPanel(el, state);
+  renderRigOverlay(el, state);
+  callbacks.onCommit(images.length > 1 ? 'Import layer images' : 'Import layer image');
+}
+
+export function collectAnimationFrames(state: EditorState): { name: string; dataUri: string }[] {
+  return state.layers
+    .filter((layer) => layer.visible)
+    .map((layer) => ({
+      name: layer.name,
+      dataUri: layer.canvas.toDataURL('image/png')
+    }));
 }
 
 export function addLayer(el: Elements, state: EditorState, callbacks: LayersPanelCallbacks): void {

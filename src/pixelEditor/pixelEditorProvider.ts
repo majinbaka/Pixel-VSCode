@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { createAnimationPanel } from '../commands/animationCommands';
 import { deleteCollisionPolygon, readCollisionPolygon, writeCollisionPolygon } from '../collisionShape';
 import { deleteLayerState, LayerStateFile, readLayerState, writeLayerState } from '../layerState';
 import { decodePngDataUri } from '../shared/png';
@@ -79,7 +80,51 @@ export class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDoc
         case 'saveCollision':
           await this.saveCollision(document.uri, message.points ?? []);
           return;
+
+        case 'importLayerImages':
+          await this.importLayerImages(webviewPanel);
+          return;
+
+        case 'previewLayersAnimation':
+          createAnimationPanel(this.context, message.frames.map((frame) => ({
+            name: frame.name,
+            path: frame.name,
+            duration: 120,
+            dataUri: frame.dataUri
+          })));
+          return;
       }
+    });
+  }
+
+  private async importLayerImages(webviewPanel: vscode.WebviewPanel): Promise<void> {
+    const uris = await vscode.window.showOpenDialog({
+      title: 'Import images as layers',
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: true,
+      filters: {
+        Images: ['png', 'jpg', 'jpeg']
+      },
+      openLabel: 'Import'
+    });
+
+    if (!uris?.length) {
+      return;
+    }
+
+    const images = await Promise.all(uris.map(async (uri) => {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      const mimeType = getImageMimeType(uri);
+      return {
+        name: path.basename(uri.fsPath),
+        dataUri: `data:${mimeType};base64,${Buffer.from(bytes).toString('base64')}`
+      };
+    }));
+
+    webviewPanel.webview.postMessage({
+      type: 'importedLayers',
+      images
     });
   }
 

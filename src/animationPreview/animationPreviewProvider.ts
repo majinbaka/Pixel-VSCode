@@ -36,8 +36,9 @@ export function getAnimationHtml(context: vscode.ExtensionContext, webview: vsco
 
       <section class="tool-group" aria-label="View">
         <label class="compact-label" for="zoomInput">Zoom</label>
-        <input id="zoomInput" class="range" type="range" min="1" max="32" step="1" value="8" title="Zoom">
+        <input id="zoomInput" class="range" type="range" min="0.05" max="32" step="0.05" value="8" title="Zoom">
         <output id="zoomLabel" class="metric">8x</output>
+        <button id="fitZoomButton" class="text-button" type="button" title="Fit to screen">Fit to screen</button>
       </section>
 
       <section class="tool-group push" aria-label="Frames">

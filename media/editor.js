@@ -38,6 +38,8 @@
       paletteSwatches: byId("paletteSwatches"),
       layersList: byId("layersList"),
       addLayerButton: byId("addLayerButton"),
+      importLayerButton: byId("importLayerButton"),
+      previewAnimationButton: byId("previewAnimationButton"),
       duplicateLayerButton: byId("duplicateLayerButton"),
       deleteLayerButton: byId("deleteLayerButton"),
       moveLayerUpButton: byId("moveLayerUpButton"),
@@ -1197,6 +1199,30 @@
   }
 
   // src/webview/editor/layersPanel.ts
+  async function importLayerImages(el, state, callbacks, images) {
+    if (images.length === 0) {
+      return;
+    }
+    const loaded = await Promise.all(images.map((image) => loadImageElement(image.dataUri)));
+    for (let index = 0; index < loaded.length; index += 1) {
+      const sourceCanvas = createLayerCanvas(el.canvas.width, el.canvas.height);
+      sourceCanvas.getContext("2d").drawImage(loaded[index], 0, 0, el.canvas.width, el.canvas.height);
+      const layer = createLayer(el, state, images[index].name.replace(/\.[^.]+$/, ""), sourceCanvas);
+      state.layers.push(layer);
+      state.activeLayerId = layer.id;
+    }
+    renderLayersPanel(el, state, callbacks);
+    renderComposite(el, state);
+    renderPivotsPanel(el, state);
+    renderRigOverlay(el, state);
+    callbacks.onCommit(images.length > 1 ? "Import layer images" : "Import layer image");
+  }
+  function collectAnimationFrames(state) {
+    return state.layers.filter((layer) => layer.visible).map((layer) => ({
+      name: layer.name,
+      dataUri: layer.canvas.toDataURL("image/png")
+    }));
+  }
   function addLayer(el, state, callbacks) {
     const layer = createLayer(el, state, `Layer ${state.layers.length + 1}`);
     state.layers.push(layer);
@@ -1876,6 +1902,14 @@
     el.colorInput.addEventListener("input", () => renderPaletteSwatches(el, () => setTool("pencil")));
     el.paletteSelect.addEventListener("change", () => renderPaletteSwatches(el, () => setTool("pencil")));
     el.addLayerButton.addEventListener("click", () => addLayer(el, state, layersPanelCallbacks));
+    el.importLayerButton.addEventListener("click", () => vscode.postMessage({ type: "importLayerImages" }));
+    el.previewAnimationButton.addEventListener("click", () => {
+      const frames = collectAnimationFrames(state);
+      if (frames.length === 0) {
+        return;
+      }
+      vscode.postMessage({ type: "previewLayersAnimation", frames });
+    });
     el.duplicateLayerButton.addEventListener("click", () => duplicateLayer(el, state, layersPanelCallbacks));
     el.deleteLayerButton.addEventListener("click", () => deleteLayer(el, state, layersPanelCallbacks));
     el.moveLayerUpButton.addEventListener("click", () => moveLayer(el, state, layersPanelCallbacks, 1));
@@ -1950,6 +1984,8 @@
             loadImage(message.dataUri, message.filename);
           }
         });
+      } else if (message.type === "importedLayers") {
+        void importLayerImages(el, state, layersPanelCallbacks, message.images);
       }
     });
     renderPalettes(el, () => setTool("pencil"));

@@ -121,6 +121,7 @@ export function getPixelEditorHtml(context: vscode.ExtensionContext, webview: vs
             <span class="panel-title">Layers</span>
             <div class="panel-actions">
               <button id="addLayerButton" class="icon-button" type="button" title="Add layer" aria-label="Add layer">+</button>
+              <button id="importLayerButton" class="icon-button" type="button" title="Import images as layers" aria-label="Import images as layers">📥</button>
               <button id="duplicateLayerButton" class="icon-button" type="button" title="Duplicate layer" aria-label="Duplicate layer">⧉</button>
               <button id="deleteLayerButton" class="icon-button" type="button" title="Delete layer" aria-label="Delete layer">🗑️</button>
             </div>
@@ -129,6 +130,7 @@ export function getPixelEditorHtml(context: vscode.ExtensionContext, webview: vs
             <button id="moveLayerUpButton" class="icon-button" type="button" title="Move layer up" aria-label="Move layer up">↑</button>
             <button id="moveLayerDownButton" class="icon-button" type="button" title="Move layer down" aria-label="Move layer down">↓</button>
             <button id="mergeLayerDownButton" class="icon-button" type="button" title="Merge layer down" aria-label="Merge layer down">⤓</button>
+            <button id="previewAnimationButton" class="icon-button" type="button" title="Preview layers as animation" aria-label="Preview layers as animation">▶</button>
           </div>
           <label class="opacity-control" for="layerOpacity">
             <span class="compact-label">Opacity</span>

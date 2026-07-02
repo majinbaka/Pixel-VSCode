@@ -12,6 +12,7 @@ export interface Elements {
   loopInput: HTMLInputElement;
   zoomInput: HTMLInputElement;
   zoomLabel: HTMLOutputElement;
+  fitZoomButton: HTMLButtonElement;
   allDurationInput: HTMLInputElement;
   applyDurationButton: HTMLButtonElement;
   pickFramesButton: HTMLButtonElement;
@@ -36,6 +37,7 @@ export function queryElements(): Elements {
     loopInput: byId<HTMLInputElement>('loopInput'),
     zoomInput: byId<HTMLInputElement>('zoomInput'),
     zoomLabel: byId<HTMLOutputElement>('zoomLabel'),
+    fitZoomButton: byId<HTMLButtonElement>('fitZoomButton'),
     allDurationInput: byId<HTMLInputElement>('allDurationInput'),
     applyDurationButton: byId<HTMLButtonElement>('applyDurationButton'),
     pickFramesButton: byId<HTMLButtonElement>('pickFramesButton')

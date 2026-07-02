@@ -56,8 +56,10 @@ import {
 } from './drawing';
 import {
   addLayer,
+  collectAnimationFrames,
   deleteLayer,
   duplicateLayer,
+  importLayerImages,
   LayersPanelCallbacks,
   mergeLayerDown,
   moveLayer,
@@ -407,6 +409,14 @@ declare const acquireVsCodeApi: () => VsCodeApi;
   el.colorInput.addEventListener('input', () => renderPaletteSwatches(el, () => setTool('pencil')));
   el.paletteSelect.addEventListener('change', () => renderPaletteSwatches(el, () => setTool('pencil')));
   el.addLayerButton.addEventListener('click', () => addLayer(el, state, layersPanelCallbacks));
+  el.importLayerButton.addEventListener('click', () => vscode.postMessage({ type: 'importLayerImages' }));
+  el.previewAnimationButton.addEventListener('click', () => {
+    const frames = collectAnimationFrames(state);
+    if (frames.length === 0) {
+      return;
+    }
+    vscode.postMessage({ type: 'previewLayersAnimation', frames });
+  });
   el.duplicateLayerButton.addEventListener('click', () => duplicateLayer(el, state, layersPanelCallbacks));
   el.deleteLayerButton.addEventListener('click', () => deleteLayer(el, state, layersPanelCallbacks));
   el.moveLayerUpButton.addEventListener('click', () => moveLayer(el, state, layersPanelCallbacks, 1));
@@ -482,6 +492,8 @@ declare const acquireVsCodeApi: () => VsCodeApi;
           loadImage(message.dataUri, message.filename);
         }
       });
+    } else if (message.type === 'importedLayers') {
+      void importLayerImages(el, state, layersPanelCallbacks, message.images);
     }
   });
 

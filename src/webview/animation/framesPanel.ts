@@ -7,12 +7,28 @@ export function updateCanvasDisplaySize(el: Elements, state: AnimationState): vo
   el.previewFrame.style.setProperty('--pixel-size', `${state.zoom}px`);
 }
 
-export function setZoom(el: Elements, state: AnimationState, value: string): void {
-  const zoom = Math.max(1, Math.min(32, Number(value) || 8));
+export function setZoom(el: Elements, state: AnimationState, value: number | string): void {
+  const zoom = Math.max(0.05, Math.min(32, Number(value) || 8));
   state.zoom = zoom;
   el.zoomInput.value = String(zoom);
-  el.zoomLabel.value = `${zoom}x`;
+  el.zoomLabel.value = `${zoom % 1 === 0 ? zoom : zoom.toFixed(2)}x`;
   updateCanvasDisplaySize(el, state);
+}
+
+export function fitZoomToScreen(el: Elements, state: AnimationState): void {
+  if (!el.canvas.width || !el.canvas.height) {
+    return;
+  }
+
+  const workspace = el.previewFrame.parentElement ?? el.previewFrame;
+  const paddingX = 64;
+  const paddingY = 64;
+  const availableWidth = Math.max(1, workspace.clientWidth - paddingX);
+  const availableHeight = Math.max(1, workspace.clientHeight - paddingY);
+
+  const zoom = Math.min(availableWidth / el.canvas.width, availableHeight / el.canvas.height);
+  const clamped = Math.max(0.05, Math.min(32, zoom));
+  setZoom(el, state, clamped);
 }
 
 export function updateStatus(el: Elements, state: AnimationState): void {

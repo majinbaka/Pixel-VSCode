@@ -2,6 +2,7 @@ import { queryElements, Elements } from './dom';
 import { AnimationState, clampDuration, createInitialState } from './state';
 import { scheduleNextFrame, setPlaying } from './playback';
 import {
+  fitZoomToScreen,
   renderFramesList,
   resizeCanvasToFrames,
   setZoom,
@@ -36,6 +37,7 @@ declare const acquireVsCodeApi: () => VsCodeApi;
       state.frames = loadedFrames;
       state.currentIndex = 0;
       resizeCanvasToFrames(el, state);
+      fitZoomToScreen(el, state);
       renderFramesList(el, state, {
         onSelectFrame: (index) => {
           showFrame(el, state, index);
@@ -73,6 +75,7 @@ declare const acquireVsCodeApi: () => VsCodeApi;
     }
   });
   el.zoomInput.addEventListener('input', () => setZoom(el, state, el.zoomInput.value));
+  el.fitZoomButton.addEventListener('click', () => fitZoomToScreen(el, state));
   el.applyDurationButton.addEventListener('click', () => {
     const duration = clampDuration(el.allDurationInput.value);
     el.allDurationInput.value = String(duration);

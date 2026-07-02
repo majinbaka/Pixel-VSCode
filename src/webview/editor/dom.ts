@@ -22,6 +22,8 @@ export interface Elements {
   paletteSwatches: HTMLElement;
   layersList: HTMLElement;
   addLayerButton: HTMLButtonElement;
+  importLayerButton: HTMLButtonElement;
+  previewAnimationButton: HTMLButtonElement;
   duplicateLayerButton: HTMLButtonElement;
   deleteLayerButton: HTMLButtonElement;
   moveLayerUpButton: HTMLButtonElement;
@@ -77,6 +79,8 @@ export function queryElements(): Elements {
     paletteSwatches: byId('paletteSwatches'),
     layersList: byId('layersList'),
     addLayerButton: byId<HTMLButtonElement>('addLayerButton'),
+    importLayerButton: byId<HTMLButtonElement>('importLayerButton'),
+    previewAnimationButton: byId<HTMLButtonElement>('previewAnimationButton'),
     duplicateLayerButton: byId<HTMLButtonElement>('duplicateLayerButton'),
     deleteLayerButton: byId<HTMLButtonElement>('deleteLayerButton'),
     moveLayerUpButton: byId<HTMLButtonElement>('moveLayerUpButton'),

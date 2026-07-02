@@ -28,6 +28,7 @@
       loopInput: byId("loopInput"),
       zoomInput: byId("zoomInput"),
       zoomLabel: byId("zoomLabel"),
+      fitZoomButton: byId("fitZoomButton"),
       allDurationInput: byId("allDurationInput"),
       applyDurationButton: byId("applyDurationButton"),
       pickFramesButton: byId("pickFramesButton")
@@ -92,11 +93,24 @@
     el.previewFrame.style.setProperty("--pixel-size", `${state.zoom}px`);
   }
   function setZoom(el, state, value) {
-    const zoom = Math.max(1, Math.min(32, Number(value) || 8));
+    const zoom = Math.max(0.05, Math.min(32, Number(value) || 8));
     state.zoom = zoom;
     el.zoomInput.value = String(zoom);
-    el.zoomLabel.value = `${zoom}x`;
+    el.zoomLabel.value = `${zoom % 1 === 0 ? zoom : zoom.toFixed(2)}x`;
     updateCanvasDisplaySize(el, state);
+  }
+  function fitZoomToScreen(el, state) {
+    if (!el.canvas.width || !el.canvas.height) {
+      return;
+    }
+    const workspace = el.previewFrame.parentElement ?? el.previewFrame;
+    const paddingX = 64;
+    const paddingY = 64;
+    const availableWidth = Math.max(1, workspace.clientWidth - paddingX);
+    const availableHeight = Math.max(1, workspace.clientHeight - paddingY);
+    const zoom = Math.min(availableWidth / el.canvas.width, availableHeight / el.canvas.height);
+    const clamped = Math.max(0.05, Math.min(32, zoom));
+    setZoom(el, state, clamped);
   }
   function updateStatus(el, state) {
     if (!state.frames.length) {
@@ -231,6 +245,7 @@
         state.frames = loadedFrames;
         state.currentIndex = 0;
         resizeCanvasToFrames(el, state);
+        fitZoomToScreen(el, state);
         renderFramesList(el, state, {
           onSelectFrame: (index) => {
             showFrame(el, state, index);
@@ -267,6 +282,7 @@
       }
     });
     el.zoomInput.addEventListener("input", () => setZoom(el, state, el.zoomInput.value));
+    el.fitZoomButton.addEventListener("click", () => fitZoomToScreen(el, state));
     el.applyDurationButton.addEventListener("click", () => {
       const duration = clampDuration(el.allDurationInput.value);
       el.allDurationInput.value = String(duration);

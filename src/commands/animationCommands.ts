@@ -23,6 +23,10 @@ export async function openAnimationPreview(
   }
 
   const frames = await readAnimationFrames(frameUris, durations);
+  createAnimationPanel(context, frames);
+}
+
+export function createAnimationPanel(context: vscode.ExtensionContext, frames: AnimationFrameData[]): vscode.WebviewPanel {
   const panel = vscode.window.createWebviewPanel(
     ANIMATION_VIEW_TYPE,
     'Pixel Animation Preview',
@@ -51,6 +55,8 @@ export async function openAnimationPreview(
         return;
     }
   });
+
+  return panel;
 }
 
 async function replaceAnimationFrames(panel: vscode.WebviewPanel): Promise<void> {
