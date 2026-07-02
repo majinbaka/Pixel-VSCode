@@ -204,6 +204,10 @@ button:disabled {
   z-index: 10;
 }
 
+.canvas-frame.selecting .resize-handle {
+  pointer-events: none;
+}
+
 .resize-handle[data-edge="n"] {
   top: -5px; left: 10px; right: 10px; height: 10px;
   cursor: n-resize;
@@ -324,6 +328,7 @@ button:disabled {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   cursor: crosshair;
+  outline: none;
 }
 
 .hitbox-overlay {

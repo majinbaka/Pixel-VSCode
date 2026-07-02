@@ -90,7 +90,7 @@ export function getPixelEditorHtml(context: vscode.ExtensionContext, webview: vs
     <section class="editor-shell" aria-label="Pixel editor workspace">
       <section id="workspace" class="workspace" aria-label="Pixel canvas workspace">
         <div id="canvasFrame" class="canvas-frame grid">
-          <canvas id="pixelCanvas" class="pixel-canvas" aria-label="Pixel canvas"></canvas>
+          <canvas id="pixelCanvas" class="pixel-canvas" tabindex="0" aria-label="Pixel canvas"></canvas>
           <svg id="hitboxOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
           <svg id="rigOverlay" class="hitbox-overlay" aria-hidden="true"></svg>
           <svg id="selectionOverlay" class="hitbox-overlay selection-overlay" aria-hidden="true"></svg>

@@ -22,7 +22,10 @@ export function updateSelectionButtons(el: Elements, state: EditorState): void {
 function applySelectionMask(state: EditorState, targetCtx: CanvasRenderingContext2D): void {
   const sel = state.selection;
   targetCtx.save();
-  if (sel.shape === 'lasso') {
+  const poly = getStaircasePolygon(state);
+  if (poly) {
+    pathFromPolygon(targetCtx, poly);
+  } else if (sel.shape === 'lasso') {
     if (sel.lassoPoints.length < 2) { targetCtx.restore(); return; }
     targetCtx.beginPath();
     targetCtx.moveTo(sel.lassoPoints[0].x, sel.lassoPoints[0].y);
@@ -42,6 +45,8 @@ function applySelectionMask(state: EditorState, targetCtx: CanvasRenderingContex
   targetCtx.clip();
 }
 
+// Staircase polygons (ellipse rasterization, orthogonalized lasso) never extend past the
+// bounding box of their source shape, so bounds stay correct without a polygon-aware branch here.
 export function selectionBounds(state: EditorState): { x1: number; y1: number; x2: number; y2: number } {
   const sel = state.selection;
   if (sel.shape === 'lasso') {
@@ -76,6 +81,10 @@ function pointInPolygon(x: number, y: number, pts: { x: number; y: number }[]): 
 export function isInsideSelection(state: EditorState, x: number, y: number): boolean {
   const sel = state.selection;
   if (!sel.active) return false;
+  const poly = getStaircasePolygon(state);
+  if (poly) {
+    return pointInPolygon(x, y, poly);
+  }
   if (sel.shape === 'lasso') {
     return pointInPolygon(x, y, sel.lassoPoints);
   }
@@ -202,6 +211,191 @@ function snapSelectionPoint(state: EditorState, x: number, y: number): { x: numb
   };
 }
 
+type Point = { x: number; y: number };
+
+function rasterizeEllipseCells(
+  b: { x1: number; y1: number; x2: number; y2: number },
+  g: number
+): { included: boolean[][]; rows: number; cols: number } {
+  const cols = Math.max(1, Math.round((b.x2 - b.x1) / g));
+  const rows = Math.max(1, Math.round((b.y2 - b.y1) / g));
+  const cx = b.x1 + (b.x2 - b.x1) / 2;
+  const cy = b.y1 + (b.y2 - b.y1) / 2;
+  const rx = (b.x2 - b.x1) / 2;
+  const ry = (b.y2 - b.y1) / 2;
+  const included: boolean[][] = Array.from({ length: rows }, () => new Array(cols).fill(false));
+  if (rx <= 0 || ry <= 0) return { included, rows, cols };
+  for (let r = 0; r < rows; r++) {
+    const cellCenterY = b.y1 + (r + 0.5) * g;
+    const ny = (cellCenterY - cy) / ry;
+    for (let c = 0; c < cols; c++) {
+      const cellCenterX = b.x1 + (c + 0.5) * g;
+      const nx = (cellCenterX - cx) / rx;
+      if (nx * nx + ny * ny <= 1) included[r][c] = true;
+    }
+  }
+  return { included, rows, cols };
+}
+
+// Traces the outer boundary of a filled cell region into an orthogonal polygon of grid-vertex
+// coordinates, walking grid vertices so the filled region stays on our right-hand side (standard
+// square-tracing / Pavlidis boundary-following convention).
+function traceGridBoundary(included: boolean[][], rows: number, cols: number): { col: number; row: number }[] {
+  const isFilled = (c: number, r: number): boolean => r >= 0 && r < rows && c >= 0 && c < cols && included[r][c];
+
+  let startR = -1, startC = -1;
+  outer: for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (included[r][c]) { startR = r; startC = c; break outer; }
+    }
+  }
+  if (startR === -1) return [];
+
+  type Heading = 'R' | 'D' | 'L' | 'U';
+  const deltas: Record<Heading, { dc: number; dr: number }> = {
+    R: { dc: 1, dr: 0 },
+    D: { dc: 0, dr: 1 },
+    L: { dc: -1, dr: 0 },
+    U: { dc: 0, dr: -1 }
+  };
+
+  const start = { c: startC, r: startR };
+  let v = { ...start };
+  let heading: Heading = 'R';
+  const path: { col: number; row: number }[] = [{ col: v.c, row: v.r }];
+  let guard = 0;
+  const maxSteps = rows * cols * 4 + 8;
+
+  do {
+    const topLeftCell = isFilled(v.c - 1, v.r - 1);
+    const topRightCell = isFilled(v.c, v.r - 1);
+    const bottomLeftCell = isFilled(v.c - 1, v.r);
+    const bottomRightCell = isFilled(v.c, v.r);
+
+    let nextHeading: Heading;
+    if (heading === 'R') {
+      if (bottomRightCell && !topRightCell) nextHeading = 'R';
+      else if (bottomRightCell && topRightCell) nextHeading = 'U';
+      else nextHeading = 'D';
+    } else if (heading === 'D') {
+      if (bottomLeftCell && !bottomRightCell) nextHeading = 'D';
+      else if (bottomLeftCell && bottomRightCell) nextHeading = 'R';
+      else nextHeading = 'L';
+    } else if (heading === 'L') {
+      if (topLeftCell && !bottomLeftCell) nextHeading = 'L';
+      else if (topLeftCell && bottomLeftCell) nextHeading = 'D';
+      else nextHeading = 'U';
+    } else {
+      if (topRightCell && !topLeftCell) nextHeading = 'U';
+      else if (topRightCell && topLeftCell) nextHeading = 'L';
+      else nextHeading = 'R';
+    }
+
+    const d = deltas[nextHeading];
+    v = { c: v.c + d.dc, r: v.r + d.dr };
+    heading = nextHeading;
+
+    const last = path[path.length - 1];
+    const prev = path.length >= 2 ? path[path.length - 2] : null;
+    const collinear = prev && ((v.c === last.col && last.col === prev.col) || (v.r === last.row && last.row === prev.row));
+    if (collinear) {
+      path[path.length - 1] = { col: v.c, row: v.r };
+    } else {
+      path.push({ col: v.c, row: v.r });
+    }
+
+    guard++;
+  } while ((v.c !== start.c || v.r !== start.r) && guard < maxSteps);
+
+  if (path.length > 1 && path[0].col === path[path.length - 1].col && path[0].row === path[path.length - 1].row) {
+    path.pop();
+  }
+  return path;
+}
+
+function buildEllipseStaircasePolygon(state: EditorState): Point[] {
+  const g = state.guideSize;
+  const b = selectionBounds(state);
+  if (b.x2 - b.x1 < g || b.y2 - b.y1 < g) return [];
+  const { included, rows, cols } = rasterizeEllipseCells(b, g);
+  const gridPoly = traceGridBoundary(included, rows, cols);
+  if (gridPoly.length < 3) return [];
+  return gridPoly.map((v) => ({ x: b.x1 + v.col * g, y: b.y1 + v.row * g }));
+}
+
+function orthogonalCorner(a: Point, b: Point): Point {
+  const dx = Math.abs(b.x - a.x);
+  const dy = Math.abs(b.y - a.y);
+  return dx >= dy ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
+}
+
+function orthogonalizeLassoPolygon(state: EditorState, points: Point[]): Point[] {
+  if (!state.snapToGuide || state.guideSize <= 1 || points.length < 2) return points;
+  const result: Point[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (a.x !== b.x && a.y !== b.y) {
+      result.push(orthogonalCorner(a, b));
+    }
+    result.push(b);
+  }
+  return result;
+}
+
+// `closed` controls whether the lasso polygon includes the segment back to the first point:
+// pass true once the selection is finalized (active) or when computing the real mask/hit-test
+// region, false for the still-open in-progress preview while the user is still drawing.
+function getStaircasePolygon(state: EditorState, closed = true): Point[] | null {
+  const sel = state.selection;
+  if (!state.snapToGuide || state.guideSize <= 1) return null;
+  if (sel.shape === 'ellipse') {
+    const poly = buildEllipseStaircasePolygon(state);
+    return poly.length >= 3 ? poly : null;
+  }
+  if (sel.shape === 'lasso') {
+    if (sel.lassoPoints.length < 2) return null;
+    const points = closed ? [...sel.lassoPoints, sel.lassoPoints[0]] : sel.lassoPoints;
+    return orthogonalizeLassoPolygon(state, points);
+  }
+  return null;
+}
+
+function pathFromPolygon(ctx: CanvasRenderingContext2D, poly: Point[]): void {
+  ctx.beginPath();
+  ctx.moveTo(poly[0].x, poly[0].y);
+  for (let i = 1; i < poly.length; i++) {
+    ctx.lineTo(poly[i].x, poly[i].y);
+  }
+  ctx.closePath();
+}
+
+function renderPolygonOverlay(el: Elements, poly: Point[], strokeW: number, closed: boolean): void {
+  const svgPoly = document.createElementNS('http://www.w3.org/2000/svg', closed ? 'polygon' : 'polyline');
+  svgPoly.setAttribute('points', poly.map((p) => `${p.x},${p.y}`).join(' '));
+  svgPoly.setAttribute('fill', 'rgba(100,160,255,0.15)');
+  svgPoly.setAttribute('stroke', 'url(#marching-ants)');
+  svgPoly.setAttribute('stroke-width', String(strokeW));
+  el.selectionOverlay.append(svgPoly);
+}
+
+export function selectAll(el: Elements, state: EditorState, onCommit: (label: string) => void): void {
+  const sel = state.selection;
+  if (sel.active) flattenSelection(el, state, onCommit);
+  sel.shape = 'rect';
+  sel.isDrawing = false;
+  sel.lassoPoints = [];
+  sel.startX = 0;
+  sel.startY = 0;
+  sel.x = 0;
+  sel.y = 0;
+  sel.w = el.canvas.width;
+  sel.h = el.canvas.height;
+  sel.active = sel.w >= 1 && sel.h >= 1;
+  renderSelectionOverlay(el, state);
+  updateSelectionButtons(el, state);
+}
+
 export function handleSelectionPointerDown(
   el: Elements,
   state: EditorState,
@@ -215,12 +409,12 @@ export function handleSelectionPointerDown(
     return;
   }
   if (sel.active) flattenSelection(el, state, onCommit);
-  const snapped = sel.shape === 'lasso' ? { x, y } : snapSelectionPoint(state, x, y);
+  const snapped = snapSelectionPoint(state, x, y);
   sel.isDrawing = true;
   sel.startX = snapped.x;
   sel.startY = snapped.y;
   sel.active = false;
-  sel.lassoPoints = sel.shape === 'lasso' ? [{ x, y }] : [];
+  sel.lassoPoints = sel.shape === 'lasso' ? [{ x: snapped.x, y: snapped.y }] : [];
   sel.x = snapped.x; sel.y = snapped.y; sel.w = 0; sel.h = 0;
   renderSelectionOverlay(el, state);
   updateSelectionButtons(el, state);
@@ -233,10 +427,10 @@ export function handleSelectionPointerMove(el: Elements, state: EditorState, x: 
     return;
   }
   if (!sel.isDrawing) return;
+  const snapped = snapSelectionPoint(state, x, y);
   if (sel.shape === 'lasso') {
-    sel.lassoPoints.push({ x, y });
+    sel.lassoPoints.push(snapped);
   } else {
-    const snapped = snapSelectionPoint(state, x, y);
     sel.w = snapped.x - sel.startX;
     sel.h = snapped.y - sel.startY;
   }
@@ -301,8 +495,12 @@ export function renderSelectionOverlay(el: Elements, state: EditorState): void {
   el.selectionOverlay.append(defs);
 
   const strokeW = Math.max(0.5, 1 / state.zoom);
+  const staircaseClosed = sel.shape !== 'lasso' || sel.active;
+  const staircasePoly = sel.shape !== 'rect' ? getStaircasePolygon(state, staircaseClosed) : null;
 
-  if (sel.shape === 'lasso' && sel.lassoPoints.length >= 2) {
+  if (staircasePoly) {
+    renderPolygonOverlay(el, staircasePoly, strokeW, staircaseClosed);
+  } else if (sel.shape === 'lasso' && sel.lassoPoints.length >= 2) {
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     poly.setAttribute('points', sel.lassoPoints.map((p) => `${p.x},${p.y}`).join(' '));
     poly.setAttribute('fill', 'rgba(100,160,255,0.15)');

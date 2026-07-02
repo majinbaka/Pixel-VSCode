@@ -30,7 +30,8 @@ import {
   handleSelectionPointerMove,
   handleSelectionPointerUp,
   liftSelection,
-  renderSelectionOverlay
+  renderSelectionOverlay,
+  selectAll
 } from './selection';
 import {
   addPivot,
@@ -99,6 +100,7 @@ declare const acquireVsCodeApi: () => VsCodeApi;
       renderPivotsPanel(el, state);
     }
     renderRigOverlay(el, state);
+    el.canvasFrame.classList.toggle('selecting', isSelectionTool(tool));
     if (!isSelectionTool(tool)) {
       clearSelection(el, state);
     }
@@ -173,6 +175,7 @@ declare const acquireVsCodeApi: () => VsCodeApi;
     renderHitboxOverlay(el, state);
     renderPivotsPanel(el, state);
     renderRigOverlay(el, state);
+    el.canvas.focus();
   }
 
   function loadImage(dataUri: string, filename: string | undefined): void {
@@ -263,6 +266,7 @@ declare const acquireVsCodeApi: () => VsCodeApi;
       return;
     }
 
+    el.canvas.focus();
     const screenPoint = eventToPixel(el, event);
     state.pointerId = event.pointerId;
     el.canvas.setPointerCapture(event.pointerId);
@@ -403,6 +407,26 @@ declare const acquireVsCodeApi: () => VsCodeApi;
   el.brushSizeInput.addEventListener('input', () => setBrushSize(el.brushSizeInput.value));
   el.zoomInput.addEventListener('input', () => setZoom(el.zoomInput.value));
   el.fitZoomButton.addEventListener('click', fitZoomToWorkspace);
+  el.workspace.addEventListener(
+    'wheel',
+    (event) => {
+      if (!event.ctrlKey && !event.metaKey) {
+        return;
+      }
+      event.preventDefault();
+      const rect = el.workspace.getBoundingClientRect();
+      const pointerX = event.clientX - rect.left + el.workspace.scrollLeft;
+      const pointerY = event.clientY - rect.top + el.workspace.scrollTop;
+      const previousZoom = state.zoom;
+      const clampedDelta = Math.max(-50, Math.min(50, event.deltaY));
+      const factor = Math.exp(-clampedDelta * 0.0025);
+      setZoom(previousZoom * factor);
+      const zoomRatio = state.zoom / previousZoom;
+      el.workspace.scrollLeft = pointerX * zoomRatio - (event.clientX - rect.left);
+      el.workspace.scrollTop = pointerY * zoomRatio - (event.clientY - rect.top);
+    },
+    { passive: false }
+  );
   el.guideSizeSelect.addEventListener('change', () => setGuideSize(el.guideSizeSelect.value));
   initResizeHandles(el, state, applyCanvasResize);
   el.saveButton.addEventListener('click', () => vscode.postMessage({ type: 'save' }));
@@ -469,6 +493,12 @@ declare const acquireVsCodeApi: () => VsCodeApi;
 
   document.addEventListener('keydown', (event) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (isSelectionTool(state.tool) && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      selectAll(el, state, doCommit);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (isSelectionTool(state.tool) && state.selection.active) {
       if (event.key === 'Escape') { flattenSelection(el, state, doCommit); event.preventDefault(); }
       if (event.key === 'Delete' || event.key === 'Backspace') { cutSelection(el, state, doCommit); event.preventDefault(); }
