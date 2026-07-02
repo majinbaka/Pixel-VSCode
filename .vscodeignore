@@ -7,3 +7,8 @@ package-lock.json
 *.vsix
 .gitignore
 a.png
+node_modules/**
+!node_modules/pngjs
+!node_modules/pngjs/**
+.claude/**
+esbuild.js

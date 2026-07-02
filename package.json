@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "publisher": "majinbaka",
   "license": "MIT",
+  "icon": "pixel-logo.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/majinbaka/pixel-vscode.git"
@@ -108,15 +109,20 @@
     "compile:webviews": "node esbuild.js",
     "watch": "tsc -watch -p ./ & node esbuild.js --watch",
     "package": "node esbuild.js --production && tsc -p ./",
-    "check": "tsc --noEmit -p . && tsc --noEmit -p src/webview"
+    "check": "tsc --noEmit -p . && tsc --noEmit -p src/webview",
+    "pretest": "npm run compile:ext",
+    "test": "vscode-test"
   },
   "dependencies": {
     "pngjs": "^7.0.0"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.14.8",
     "@types/pngjs": "^6.0.5",
     "@types/vscode": "^1.90.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
     "esbuild": "^0.28.1",
     "typescript": "^5.5.2"
   }
