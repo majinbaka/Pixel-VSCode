@@ -14,6 +14,7 @@ import {
   updateCanvasDisplaySize,
   VsCodeApi
 } from './canvasCore';
+import { EditorClipboardPayload } from './wireTypes';
 import {
   autoTraceHitbox,
   deleteNearestHitboxPoint,
@@ -24,12 +25,14 @@ import {
 } from './hitbox';
 import {
   clearSelection,
+  copySelectionToClipboard,
   cutSelection,
   flattenSelection,
   handleSelectionPointerDown,
   handleSelectionPointerMove,
   handleSelectionPointerUp,
   liftSelection,
+  pasteSelectionFromClipboard,
   renderSelectionOverlay,
   selectAll
 } from './selection';
@@ -64,6 +67,7 @@ import {
   LayersPanelCallbacks,
   mergeLayerDown,
   moveLayer,
+  pasteLayerFromClipboard,
   renderLayersPanel,
   setActiveLayerOpacity
 } from './layersPanel';
@@ -442,6 +446,19 @@ declare const acquireVsCodeApi: () => VsCodeApi;
     vscode.postMessage({ type: 'previewLayersAnimation', frames });
   });
   el.duplicateLayerButton.addEventListener('click', () => duplicateLayer(el, state, layersPanelCallbacks));
+  el.copyLayerButton.addEventListener('click', () => {
+    const layer = getActiveLayer(state);
+    if (!layer) return;
+    vscode.postMessage({ type: 'copyLayer', name: layer.name, dataUri: layer.canvas.toDataURL('image/png') });
+  });
+  el.pasteClipboardButton.addEventListener('click', () => vscode.postMessage({ type: 'requestPaste' }));
+  el.exportSpriteSheetButton.addEventListener('click', () => {
+    const frames = collectAnimationFrames(state);
+    if (frames.length === 0) {
+      return;
+    }
+    vscode.postMessage({ type: 'exportSpriteSheet', frames });
+  });
   el.deleteLayerButton.addEventListener('click', () => deleteLayer(el, state, layersPanelCallbacks));
   el.moveLayerUpButton.addEventListener('click', () => moveLayer(el, state, layersPanelCallbacks, 1));
   el.moveLayerDownButton.addEventListener('click', () => moveLayer(el, state, layersPanelCallbacks, -1));
@@ -467,6 +484,11 @@ declare const acquireVsCodeApi: () => VsCodeApi;
   el.selectionClearButton.addEventListener('click', () => {
     flattenSelection(el, state, doCommit);
   });
+  el.selectionCopyButton.addEventListener('click', () => {
+    const payload = copySelectionToClipboard(el, state);
+    if (!payload) return;
+    vscode.postMessage({ type: 'copySelection', width: payload.width, height: payload.height, dataUri: payload.dataUri });
+  });
 
   el.autoTraceButton.addEventListener('click', () => autoTraceHitbox(el, state));
   el.clearHitboxButton.addEventListener('click', () => {
@@ -491,6 +513,18 @@ declare const acquireVsCodeApi: () => VsCodeApi;
     hideCursorOverlay(el);
   });
 
+  const toolShortcuts: Record<string, Tool> = {
+    p: 'pencil',
+    e: 'eraser',
+    b: 'fill',
+    i: 'picker',
+    r: 'select-rect',
+    o: 'select-ellipse',
+    l: 'select-lasso',
+    h: 'hitbox',
+    g: 'rig'
+  };
+
   document.addEventListener('keydown', (event) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
     if (isSelectionTool(state.tool) && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
@@ -498,6 +532,14 @@ declare const acquireVsCodeApi: () => VsCodeApi;
       event.preventDefault();
       event.stopPropagation();
       return;
+    }
+    if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+      const tool = toolShortcuts[event.key.toLowerCase()];
+      if (tool) {
+        setTool(tool);
+        event.preventDefault();
+        return;
+      }
     }
     if (isSelectionTool(state.tool) && state.selection.active) {
       if (event.key === 'Escape') { flattenSelection(el, state, doCommit); event.preventDefault(); }
@@ -524,6 +566,16 @@ declare const acquireVsCodeApi: () => VsCodeApi;
       });
     } else if (message.type === 'importedLayers') {
       void importLayerImages(el, state, layersPanelCallbacks, message.images);
+    } else if (message.type === 'pasteClipboard') {
+      const payload: EditorClipboardPayload = message.payload;
+      if (payload.kind === 'layer') {
+        void pasteLayerFromClipboard(el, state, layersPanelCallbacks, payload.name, payload.dataUri);
+      } else if (payload.kind === 'selection') {
+        void loadImageElement(payload.dataUri).then((image) => {
+          pasteSelectionFromClipboard(el, state, image, payload.width, payload.height);
+          setTool('select-rect');
+        });
+      }
     }
   });
 

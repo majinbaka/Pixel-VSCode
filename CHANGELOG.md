@@ -4,6 +4,13 @@ All notable changes to the "Pixel VSCode" extension are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- Keyboard shortcuts for tool switching in the Pixel Editor: P (Pencil), E (Eraser), B (Fill), I (Color picker), R (Rectangular selection), O (Ellipse selection), L (Lasso selection), H (Hitbox), G (Rig).
+- Copy/paste for layers and selections via an in-session editor clipboard, letting you copy a layer or selection in one PNG and paste it into another open Pixel Editor tab.
+- `Export sprite sheet` button that composites all visible layers into a single grid-atlas PNG (one cell per visible layer).
+
 ## [1.0.0]
 
 ### Added

@@ -6,6 +6,8 @@ import { deleteLayerState, LayerStateFile, readLayerState, writeLayerState } fro
 import { decodePngDataUri } from '../shared/png';
 import { confirmOverwrite, pickNonConflictingUri } from '../shared/uri';
 import { WebviewMessage } from '../shared/types';
+import { getEditorClipboard, setEditorClipboard } from './editorClipboard';
+import { exportSpriteSheet } from './spriteSheetExport';
 import { getPixelEditorHtml } from './html';
 import { PixelDocument } from './pixelDocument';
 
@@ -92,6 +94,28 @@ export class PixelEditorProvider implements vscode.CustomEditorProvider<PixelDoc
             duration: 120,
             dataUri: frame.dataUri
           })));
+          return;
+
+        case 'copyLayer':
+          setEditorClipboard({ kind: 'layer', name: message.name, dataUri: message.dataUri });
+          return;
+
+        case 'copySelection':
+          setEditorClipboard({ kind: 'selection', width: message.width, height: message.height, dataUri: message.dataUri });
+          return;
+
+        case 'requestPaste': {
+          const payload = getEditorClipboard();
+          if (payload) {
+            webviewPanel.webview.postMessage({ type: 'pasteClipboard', payload });
+          } else {
+            vscode.window.setStatusBarMessage('Pixel Editor clipboard is empty.', 3000);
+          }
+          return;
+        }
+
+        case 'exportSpriteSheet':
+          await exportSpriteSheet(message.frames, document.uri);
           return;
       }
     });

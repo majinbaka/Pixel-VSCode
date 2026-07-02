@@ -19,19 +19,20 @@ export function getPixelEditorHtml(context: vscode.ExtensionContext, webview: vs
   <main class="app">
     <header class="toolbar" aria-label="Pixel editor toolbar">
       <section class="tool-group" aria-label="Tools">
-        <button class="icon-button active" type="button" data-tool="pencil" title="Pencil" aria-label="Pencil">✏️</button>
-        <button class="icon-button" type="button" data-tool="eraser" title="Eraser" aria-label="Eraser">🧹</button>
-        <button class="icon-button" type="button" data-tool="fill" title="Fill" aria-label="Fill">🪣</button>
-        <button class="icon-button" type="button" data-tool="picker" title="Color picker" aria-label="Color picker">💧</button>
+        <button class="icon-button active" type="button" data-tool="pencil" title="Pencil (P)" aria-label="Pencil">✏️</button>
+        <button class="icon-button" type="button" data-tool="eraser" title="Eraser (E)" aria-label="Eraser">🧹</button>
+        <button class="icon-button" type="button" data-tool="fill" title="Fill (B)" aria-label="Fill">🪣</button>
+        <button class="icon-button" type="button" data-tool="picker" title="Color picker (I)" aria-label="Color picker">💧</button>
       </section>
 
       <section class="tool-group" aria-label="Selection">
-        <button class="icon-button" type="button" data-tool="select-rect" title="Rectangular Selection: drag to select a region" aria-label="Rectangular selection">▭</button>
-        <button class="icon-button" type="button" data-tool="select-ellipse" title="Ellipse Selection: drag to select an ellipse region" aria-label="Ellipse selection">◯</button>
-        <button class="icon-button" type="button" data-tool="select-lasso" title="Lasso Selection: draw a freehand closed shape to select" aria-label="Lasso selection">🪢</button>
+        <button class="icon-button" type="button" data-tool="select-rect" title="Rectangular Selection (R): drag to select a region" aria-label="Rectangular selection">▭</button>
+        <button class="icon-button" type="button" data-tool="select-ellipse" title="Ellipse Selection (O): drag to select an ellipse region" aria-label="Ellipse selection">◯</button>
+        <button class="icon-button" type="button" data-tool="select-lasso" title="Lasso Selection (L): draw a freehand closed shape to select" aria-label="Lasso selection">🪢</button>
         <button id="selectionMoveButton" class="text-button" type="button" title="Move the selected region (or press M)" disabled>Move</button>
         <button id="selectionCutButton" class="text-button" type="button" title="Cut the selected region (or press Delete)" disabled>Cut</button>
         <button id="selectionClearButton" class="text-button" type="button" title="Clear selection (or press Escape)" disabled>Deselect</button>
+        <button id="selectionCopyButton" class="text-button" type="button" title="Copy the selected region to the editor clipboard" disabled>Copy</button>
       </section>
 
       <section class="tool-group" aria-label="Brush">
@@ -65,7 +66,7 @@ export function getPixelEditorHtml(context: vscode.ExtensionContext, webview: vs
       </section>
 
       <section class="tool-group" aria-label="Hitbox">
-        <button class="icon-button" type="button" data-tool="hitbox" title="Edit hitbox (click to add a point, drag to move, right-click to delete)" aria-label="Edit hitbox">⬡</button>
+        <button class="icon-button" type="button" data-tool="hitbox" title="Edit hitbox (H): click to add a point, drag to move, right-click to delete" aria-label="Edit hitbox">⬡</button>
         <button id="autoTraceButton" class="text-button" type="button" title="Generate a convex hitbox from the sprite's opaque pixels">Auto</button>
         <button id="clearHitboxButton" class="text-button" type="button" title="Remove all hitbox points">Clear</button>
         <button id="saveHitboxButton" class="text-button" type="button" title="Write the hitbox to a ConvexPolygonShape2D .tres next to this PNG">Save Hitbox</button>
@@ -73,7 +74,7 @@ export function getPixelEditorHtml(context: vscode.ExtensionContext, webview: vs
       </section>
 
       <section class="tool-group" aria-label="Rig">
-        <button class="icon-button" type="button" data-tool="rig" title="Rig: click a pivot to select it, drag the pivot, then drag the handle to rotate" aria-label="Rig tool">🦴</button>
+        <button class="icon-button" type="button" data-tool="rig" title="Rig (G): click a pivot to select it, drag the pivot, then drag the handle to rotate" aria-label="Rig tool">🦴</button>
         <label class="compact-label" for="rigAngle">Angle</label>
         <input id="rigAngle" class="number-input" type="number" step="1" value="0" title="Rotation angle in degrees">
         <button id="addPivotButton" class="text-button" type="button" title="Add a new pivot point to the active layer">+ Pivot</button>
@@ -131,6 +132,9 @@ export function getPixelEditorHtml(context: vscode.ExtensionContext, webview: vs
             <button id="moveLayerDownButton" class="icon-button" type="button" title="Move layer down" aria-label="Move layer down">↓</button>
             <button id="mergeLayerDownButton" class="icon-button" type="button" title="Merge layer down" aria-label="Merge layer down">⤓</button>
             <button id="previewAnimationButton" class="icon-button" type="button" title="Preview layers as animation" aria-label="Preview layers as animation">▶</button>
+            <button id="copyLayerButton" class="icon-button" type="button" title="Copy layer to the editor clipboard" aria-label="Copy layer">📋</button>
+            <button id="pasteClipboardButton" class="icon-button" type="button" title="Paste from the editor clipboard" aria-label="Paste from clipboard">📌</button>
+            <button id="exportSpriteSheetButton" class="icon-button" type="button" title="Export visible layers as a sprite sheet PNG" aria-label="Export sprite sheet">🖼️</button>
           </div>
           <label class="opacity-control" for="layerOpacity">
             <span class="compact-label">Opacity</span>

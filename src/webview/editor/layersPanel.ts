@@ -46,6 +46,27 @@ export function collectAnimationFrames(state: EditorState): { name: string; data
     }));
 }
 
+export async function pasteLayerFromClipboard(
+  el: Elements,
+  state: EditorState,
+  callbacks: LayersPanelCallbacks,
+  name: string,
+  dataUri: string
+): Promise<void> {
+  const image = await loadImageElement(dataUri);
+  const sourceCanvas = createLayerCanvas(el.canvas.width, el.canvas.height);
+  sourceCanvas.getContext('2d')!.drawImage(image, 0, 0, el.canvas.width, el.canvas.height);
+  const layer = createLayer(el, state, `${name} (pasted)`, sourceCanvas);
+  state.layers.push(layer);
+  state.activeLayerId = layer.id;
+
+  renderLayersPanel(el, state, callbacks);
+  renderComposite(el, state);
+  renderPivotsPanel(el, state);
+  renderRigOverlay(el, state);
+  callbacks.onCommit('Paste layer');
+}
+
 export function addLayer(el: Elements, state: EditorState, callbacks: LayersPanelCallbacks): void {
   const layer = createLayer(el, state, `Layer ${state.layers.length + 1}`);
   state.layers.push(layer);

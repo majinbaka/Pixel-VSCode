@@ -21,3 +21,7 @@ export interface LayerEntryState {
 export interface LayerStateFile {
   layers: LayerEntryState[];
 }
+
+export type EditorClipboardPayload =
+  | { kind: 'layer'; name: string; dataUri: string }
+  | { kind: 'selection'; width: number; height: number; dataUri: string };

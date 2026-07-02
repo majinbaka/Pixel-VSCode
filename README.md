@@ -17,6 +17,7 @@ A full-featured pixel art editor that runs right inside VS Code — draw, rig, b
 
 ### 1. Drawing and editing
 - **Pencil, Eraser, Fill (bucket), Color picker** tools with an adjustable brush size from 1–64 px.
+- **Keyboard shortcuts for tool switching**: `P` Pencil, `E` Eraser, `B` Fill, `I` Color picker, `R` Rectangular selection, `O` Ellipse selection, `L` Lasso selection, `H` Hitbox, `G` Rig — press the key while the canvas has focus to switch instantly, no need to reach for the toolbar.
 - Built-in color palettes: **PICO-8, Game Boy, DawnBringer 16, AAP-16** — pick colors instantly without hunting for an external swatch.
 - Toggleable **guide grid snapping** with step sizes of 1, 8, 16, 32, 64, or 128 px, for pixel-perfect drawing aligned to tiles or sprite scale.
 - **Smooth zoom** (0.1x–40x) via slider or Ctrl+Scroll that keeps the cursor position anchored, plus a **Fit to screen** button to instantly frame the canvas.
@@ -24,12 +25,14 @@ A full-featured pixel art editor that runs right inside VS Code — draw, rig, b
 ### 2. Powerful selection tools
 - Three selection shapes: **Rectangular, Ellipse, Lasso (freehand)**.
 - **Staircase polygon selection**: when snap-to-grid is enabled, ellipse and lasso selections are automatically "staircased" to the pixel grid (using an orthogonal boundary-tracing / Pavlidis-style algorithm), producing crisp, pixel-accurate selections instead of smooth curves that don't align to the grid.
-- **Move** or **Cut** the selected content, with grid snapping while dragging.
+- **Move**, **Cut**, or **Copy** the selected content, with grid snapping while dragging.
 - A "marching ants" overlay clearly shows the active selection at any zoom level.
 
 ### 3. Full layer system
 - Add, duplicate, delete, reorder, **merge down**, and set per-layer **opacity**.
 - **Import images as new layers**: pick one or more image files and drop them straight in as layers, automatically named after the source file.
+- **Copy/paste layers and selections between files**: copy a layer or a selection in one Pixel Editor tab and paste it into another open PNG — the pasted content lands as a new layer (or a movable floating selection), so you can quickly reuse art across sprites in the same VS Code session.
+- **Export sprite sheet**: composites every currently visible layer into a single grid-atlas PNG (one cell per layer, laid out in the smallest square-ish grid) — handy for turning layered poses/frames into one texture.
 - Show/hide layers independently, rename layers directly in the panel.
 - The entire layer structure (order, opacity, rig, visibility) is saved to a `.pixvjson` sidecar file next to the PNG and automatically restored on reopen — no need to rebuild it from scratch.
 
@@ -75,15 +78,15 @@ The editor and animation preview commands also appear in the Explorer right-clic
 
 | Section | Controls |
 |---|---|
-| Tools | Pencil, Eraser, Fill, Color picker |
-| Selection | Rectangular, Ellipse, Lasso — with Move or Cut |
+| Tools | Pencil (P), Eraser (E), Fill (B), Color picker (I) |
+| Selection | Rectangular (R), Ellipse (O), Lasso (L) — with Move, Cut, or Copy |
 | Brush | Color picker, brush size (1–64 px) |
 | View | Zoom slider, Fit button, grid toggle, snap toggle, guide size |
-| Hitbox | Edit hitbox points, Auto-trace, Clear, Save Hitbox |
-| Rig | Select pivot, set angle, add pivot, reset rig |
+| Hitbox (H) | Edit hitbox points, Auto-trace, Clear, Save Hitbox |
+| Rig (G) | Select pivot, set angle, add pivot, reset rig |
 | File | Status, Save |
 
-The side panel manages **Layers** (add/delete/duplicate/import image/opacity) alongside the built-in color **Palette**.
+The side panel manages **Layers** (add/delete/duplicate/import image/copy/paste/export sprite sheet/opacity) alongside the built-in color **Palette**.
 
 ## Save behavior
 

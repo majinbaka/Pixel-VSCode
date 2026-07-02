@@ -17,6 +17,7 @@ export function updateSelectionButtons(el: Elements, state: EditorState): void {
   el.selectionMoveButton.disabled = !has;
   el.selectionCutButton.disabled = !has;
   el.selectionClearButton.disabled = !has;
+  el.selectionCopyButton.disabled = !has;
 }
 
 function applySelectionMask(state: EditorState, targetCtx: CanvasRenderingContext2D): void {
@@ -144,6 +145,60 @@ export function flattenSelection(el: Elements, state: EditorState, onCommit: (la
   renderComposite(el, state);
   onCommit('Move selection');
   clearSelection(el, state);
+}
+
+export function copySelectionToClipboard(
+  el: Elements,
+  state: EditorState
+): { width: number; height: number; dataUri: string } | undefined {
+  const sel = state.selection;
+  if (!sel.active) return undefined;
+
+  const wasLifted = !!sel.floatCanvas;
+  if (!wasLifted) liftSelection(el, state);
+  if (!sel.floatCanvas) return undefined;
+
+  const payload = {
+    width: sel.floatCanvas.width,
+    height: sel.floatCanvas.height,
+    dataUri: sel.floatCanvas.toDataURL('image/png')
+  };
+
+  if (!wasLifted) {
+    flattenSelection(el, state, () => { /* copy should not create an undo step */ });
+  }
+
+  return payload;
+}
+
+export function pasteSelectionFromClipboard(
+  el: Elements,
+  state: EditorState,
+  loadedImage: HTMLImageElement,
+  width: number,
+  height: number
+): void {
+  const sel = state.selection;
+  if (sel.active) flattenSelection(el, state, () => { /* replaced by the pasted selection below */ });
+
+  const floatCanvas = createLayerCanvas(width, height);
+  floatCanvas.getContext('2d')!.drawImage(loadedImage, 0, 0, width, height);
+
+  sel.shape = 'rect';
+  sel.lassoPoints = [];
+  sel.isDrawing = false;
+  sel.x = 0;
+  sel.y = 0;
+  sel.w = width;
+  sel.h = height;
+  sel.active = true;
+  sel.floatCanvas = floatCanvas;
+  sel.floatX = 0;
+  sel.floatY = 0;
+
+  renderSelectionOverlay(el, state);
+  updateSelectionButtons(el, state);
+  renderCompositeWithFloat(el, state);
 }
 
 export function cutSelection(el: Elements, state: EditorState, onCommit: (label: string) => void): void {

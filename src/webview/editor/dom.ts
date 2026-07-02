@@ -48,6 +48,10 @@ export interface Elements {
   selectionMoveButton: HTMLButtonElement;
   selectionCutButton: HTMLButtonElement;
   selectionClearButton: HTMLButtonElement;
+  selectionCopyButton: HTMLButtonElement;
+  copyLayerButton: HTMLButtonElement;
+  pasteClipboardButton: HTMLButtonElement;
+  exportSpriteSheetButton: HTMLButtonElement;
 }
 
 export function queryElements(): Elements {
@@ -104,6 +108,10 @@ export function queryElements(): Elements {
     selectionDragCanvas: byId<HTMLCanvasElement>('selectionDragCanvas'),
     selectionMoveButton: byId<HTMLButtonElement>('selectionMoveButton'),
     selectionCutButton: byId<HTMLButtonElement>('selectionCutButton'),
-    selectionClearButton: byId<HTMLButtonElement>('selectionClearButton')
+    selectionClearButton: byId<HTMLButtonElement>('selectionClearButton'),
+    selectionCopyButton: byId<HTMLButtonElement>('selectionCopyButton'),
+    copyLayerButton: byId<HTMLButtonElement>('copyLayerButton'),
+    pasteClipboardButton: byId<HTMLButtonElement>('pasteClipboardButton'),
+    exportSpriteSheetButton: byId<HTMLButtonElement>('exportSpriteSheetButton')
   };
 }
