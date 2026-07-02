@@ -152,8 +152,8 @@
     return target.rig.pivots.find((pivot) => pivot.id === target.rig.activePivotId) ?? target.rig.pivots[0];
   }
   function updateCanvasDisplaySize(el, state) {
-    el.canvas.style.width = `${el.canvas.width * state.zoom}px`;
-    el.canvas.style.height = `${el.canvas.height * state.zoom}px`;
+    el.canvas.style.width = `${Math.round(el.canvas.width * state.zoom)}px`;
+    el.canvas.style.height = `${Math.round(el.canvas.height * state.zoom)}px`;
     el.canvasFrame.style.setProperty("--pixel-size", `${state.zoom}px`);
     el.canvasFrame.style.setProperty("--guide-size", `${state.zoom * state.guideSize}px`);
   }
@@ -539,13 +539,18 @@
     sel.dragOffY = y - sel.floatY;
     return true;
   }
+  function snapToGrid(value, step) {
+    return Math.round(value / step) * step;
+  }
   function moveDragSelection(el, state, x, y) {
     const sel = state.selection;
     if (!sel.isDraggingContent) return;
-    const newX = x - sel.dragOffX;
-    const newY = y - sel.dragOffY;
+    const step = state.snapToGuide && state.guideSize > 1 ? state.guideSize : 1;
+    const newX = snapToGrid(x - sel.dragOffX, step);
+    const newY = snapToGrid(y - sel.dragOffY, step);
     const dx = newX - sel.floatX;
     const dy = newY - sel.floatY;
+    if (dx === 0 && dy === 0) return;
     sel.floatX = newX;
     sel.floatY = newY;
     if (sel.shape === "lasso") {
@@ -570,6 +575,13 @@
       el.ctx.restore();
     }
   }
+  function snapSelectionPoint(state, x, y) {
+    if (!state.snapToGuide || state.guideSize <= 1) return { x, y };
+    return {
+      x: Math.round(x / state.guideSize) * state.guideSize,
+      y: Math.round(y / state.guideSize) * state.guideSize
+    };
+  }
   function handleSelectionPointerDown(el, state, onCommit, x, y) {
     const sel = state.selection;
     if (sel.active && isInsideSelection(state, x, y)) {
@@ -577,13 +589,14 @@
       return;
     }
     if (sel.active) flattenSelection(el, state, onCommit);
+    const snapped = sel.shape === "lasso" ? { x, y } : snapSelectionPoint(state, x, y);
     sel.isDrawing = true;
-    sel.startX = x;
-    sel.startY = y;
+    sel.startX = snapped.x;
+    sel.startY = snapped.y;
     sel.active = false;
     sel.lassoPoints = sel.shape === "lasso" ? [{ x, y }] : [];
-    sel.x = x;
-    sel.y = y;
+    sel.x = snapped.x;
+    sel.y = snapped.y;
     sel.w = 0;
     sel.h = 0;
     renderSelectionOverlay(el, state);
@@ -599,8 +612,9 @@
     if (sel.shape === "lasso") {
       sel.lassoPoints.push({ x, y });
     } else {
-      sel.w = x - sel.startX;
-      sel.h = y - sel.startY;
+      const snapped = snapSelectionPoint(state, x, y);
+      sel.w = snapped.x - sel.startX;
+      sel.h = snapped.y - sel.startY;
     }
     renderSelectionOverlay(el, state);
   }
@@ -619,8 +633,9 @@
         sel.lassoPoints = [];
       }
     } else {
-      sel.w = x - sel.startX;
-      sel.h = y - sel.startY;
+      const snapped = snapSelectionPoint(state, x, y);
+      sel.w = snapped.x - sel.startX;
+      sel.h = snapped.y - sel.startY;
       sel.active = Math.abs(sel.w) >= 1 && Math.abs(sel.h) >= 1;
     }
     renderSelectionOverlay(el, state);
@@ -701,15 +716,22 @@
       el.selectionDragCanvas.width = sel.floatCanvas.width;
       el.selectionDragCanvas.height = sel.floatCanvas.height;
       el.selectionDragCanvas.getContext("2d").drawImage(sel.floatCanvas, 0, 0);
-      el.selectionDragCanvas.style.left = `${sel.floatX * state.zoom}px`;
-      el.selectionDragCanvas.style.top = `${sel.floatY * state.zoom}px`;
-      el.selectionDragCanvas.style.width = `${sel.floatCanvas.width * state.zoom}px`;
-      el.selectionDragCanvas.style.height = `${sel.floatCanvas.height * state.zoom}px`;
+      el.selectionDragCanvas.style.left = `${Math.round(sel.floatX * state.zoom)}px`;
+      el.selectionDragCanvas.style.top = `${Math.round(sel.floatY * state.zoom)}px`;
+      el.selectionDragCanvas.style.width = `${Math.round(sel.floatCanvas.width * state.zoom)}px`;
+      el.selectionDragCanvas.style.height = `${Math.round(sel.floatCanvas.height * state.zoom)}px`;
       el.selectionDragCanvas.hidden = false;
     }
   }
 
   // src/webview/editor/rig.ts
+  function snapAngleToDegree(angle) {
+    return Math.round(angle * 180 / Math.PI) * (Math.PI / 180);
+  }
+  function snapToGuide(state, value) {
+    if (!state.snapToGuide || state.guideSize <= 1) return Math.round(value);
+    return Math.round(value / state.guideSize) * state.guideSize;
+  }
   function rigHandleDistance(el) {
     return Math.max(el.canvas.width, el.canvas.height) / 4;
   }
@@ -879,7 +901,7 @@
       state.rig.dragMode = "rotate";
       const dx = x - pivot.x;
       const dy = y - pivot.y;
-      pivot.angle = Math.atan2(dy, dx) + Math.PI / 2;
+      pivot.angle = snapAngleToDegree(Math.atan2(dy, dx) + Math.PI / 2);
       updateRigAngleInput(el, state, layer);
       renderComposite(el, state);
     }
@@ -895,35 +917,73 @@
       return;
     }
     if (state.rig.dragMode === "pivot") {
-      pivot.x = x;
-      pivot.y = y;
+      pivot.x = snapToGuide(state, x);
+      pivot.y = snapToGuide(state, y);
     } else if (state.rig.dragMode === "rotate") {
       const dx = x - pivot.x;
       const dy = y - pivot.y;
-      pivot.angle = Math.atan2(dy, dx) + Math.PI / 2;
+      pivot.angle = snapAngleToDegree(Math.atan2(dy, dx) + Math.PI / 2);
       updateRigAngleInput(el, state, layer);
     }
     renderComposite(el, state);
     renderRigOverlay(el, state);
   }
+  function rotateNearestNeighbor(source, width, height, pivotX, pivotY, angle, blockSize) {
+    const src = source.getImageData(0, 0, width, height);
+    const dst = source.createImageData(width, height);
+    const cos = Math.cos(-angle);
+    const sin = Math.sin(-angle);
+    const step = Math.max(1, Math.floor(blockSize));
+    for (let by = 0; by < height; by += step) {
+      for (let bx = 0; bx < width; bx += step) {
+        const relX = bx + step / 2 - pivotX;
+        const relY = by + step / 2 - pivotY;
+        const srcCenterX = pivotX + (relX * cos - relY * sin);
+        const srcCenterY = pivotY + (relX * sin + relY * cos);
+        if (srcCenterX < 0 || srcCenterX >= width || srcCenterY < 0 || srcCenterY >= height) {
+          continue;
+        }
+        const maxBx = Math.max(0, Math.floor((width - 1) / step) * step);
+        const maxBy = Math.max(0, Math.floor((height - 1) / step) * step);
+        const srcBx = Math.min(maxBx, Math.floor(srcCenterX / step) * step);
+        const srcBy = Math.min(maxBy, Math.floor(srcCenterY / step) * step);
+        const sampleX = Math.min(width - 1, srcBx + Math.floor(step / 2));
+        const sampleY = Math.min(height - 1, srcBy + Math.floor(step / 2));
+        const sampleIndex = (sampleY * width + sampleX) * 4;
+        const r = src.data[sampleIndex];
+        const g = src.data[sampleIndex + 1];
+        const b = src.data[sampleIndex + 2];
+        const a = src.data[sampleIndex + 3];
+        for (let oy = 0; oy < step && by + oy < height; oy++) {
+          for (let ox = 0; ox < step && bx + ox < width; ox++) {
+            const dstIndex = ((by + oy) * width + (bx + ox)) * 4;
+            dst.data[dstIndex] = r;
+            dst.data[dstIndex + 1] = g;
+            dst.data[dstIndex + 2] = b;
+            dst.data[dstIndex + 3] = a;
+          }
+        }
+      }
+    }
+    return dst;
+  }
   function bakeRigRotation(el, state, layer) {
     if (!layer || !layer.rig.pivots.some((pivot) => pivot.angle)) {
       return false;
     }
-    const rotated = createLayerCanvas(el.canvas.width, el.canvas.height);
-    const rotatedCtx = rotated.getContext("2d");
-    rotatedCtx.imageSmoothingEnabled = false;
-    rotatedCtx.save();
+    const width = el.canvas.width;
+    const height = el.canvas.height;
+    const blockSize = state.snapToGuide && state.guideSize > 1 ? state.guideSize : 1;
+    let sourceCanvas = layer.canvas;
     for (const pivot of layer.rig.pivots) {
-      if (pivot.angle) {
-        rotatedCtx.translate(pivot.x, pivot.y);
-        rotatedCtx.rotate(pivot.angle);
-        rotatedCtx.translate(-pivot.x, -pivot.y);
-      }
+      if (!pivot.angle) continue;
+      const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+      const rotatedData = rotateNearestNeighbor(sourceCtx, width, height, pivot.x, pivot.y, pivot.angle, blockSize);
+      const nextCanvas = createLayerCanvas(width, height);
+      nextCanvas.getContext("2d").putImageData(rotatedData, 0, 0);
+      sourceCanvas = nextCanvas;
     }
-    rotatedCtx.drawImage(layer.canvas, 0, 0);
-    rotatedCtx.restore();
-    layer.canvas = rotated;
+    layer.canvas = sourceCanvas;
     for (const pivot of layer.rig.pivots) {
       pivot.angle = 0;
     }
@@ -961,6 +1021,13 @@
     return {
       x: Math.max(0, Math.min(el.canvas.width - 1, x)),
       y: Math.max(0, Math.min(el.canvas.height - 1, y))
+    };
+  }
+  function eventToSubPixel(el, event) {
+    const rect = el.canvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) / rect.width * el.canvas.width,
+      y: (event.clientY - rect.top) / rect.height * el.canvas.height
     };
   }
   function unrotatePoint(x, y, pivot, angle) {
@@ -1436,7 +1503,7 @@
     let startX = 0, startY = 0;
     let startW = 0, startH = 0;
     let pending = null;
-    function snapToGuide(v) {
+    function snapToGuide2(v) {
       if (!state.snapToGuide || state.guideSize <= 1) return v;
       return Math.max(state.guideSize, Math.round(v / state.guideSize) * state.guideSize);
     }
@@ -1444,16 +1511,16 @@
       const dx = Math.round((e.clientX - startX) / state.zoom);
       const dy = Math.round((e.clientY - startY) / state.zoom);
       let newW = startW, newH = startH, offX = 0, offY = 0;
-      if (dragEdge.includes("e")) newW = snapToGuide(Math.max(1, startW + dx));
-      if (dragEdge.includes("s")) newH = snapToGuide(Math.max(1, startH + dy));
+      if (dragEdge.includes("e")) newW = snapToGuide2(Math.max(1, startW + dx));
+      if (dragEdge.includes("s")) newH = snapToGuide2(Math.max(1, startH + dy));
       if (dragEdge.includes("w")) {
         const raw = startW + Math.max(0, -dx);
-        newW = snapToGuide(Math.max(1, raw));
+        newW = snapToGuide2(Math.max(1, raw));
         offX = newW - startW;
       }
       if (dragEdge.includes("n")) {
         const raw = startH + Math.max(0, -dy);
-        newH = snapToGuide(Math.max(1, raw));
+        newH = snapToGuide2(Math.max(1, raw));
         offY = newH - startH;
       }
       return { newW, newH, offX, offY };
@@ -1694,7 +1761,8 @@
         return;
       }
       if (state.tool === "rig") {
-        handleRigPointerDown(el, state, screenPoint.x, screenPoint.y);
+        const subPixel = eventToSubPixel(el, event);
+        handleRigPointerDown(el, state, subPixel.x, subPixel.y);
         return;
       }
       if (isSelectionTool(state.tool)) {
@@ -1737,13 +1805,18 @@
         return;
       }
       if (state.tool === "rig") {
-        const screenPoint = eventToPixel(el, event);
-        handleRigPointerMove(el, state, screenPoint.x, screenPoint.y);
+        const subPixel = eventToSubPixel(el, event);
+        handleRigPointerMove(el, state, subPixel.x, subPixel.y);
         return;
       }
       if (isSelectionTool(state.tool)) {
-        const screenPoint = eventToPixel(el, event);
-        handleSelectionPointerMove(el, state, screenPoint.x, screenPoint.y);
+        if (state.selection.isDraggingContent) {
+          const subPixel = eventToSubPixel(el, event);
+          handleSelectionPointerMove(el, state, subPixel.x, subPixel.y);
+        } else {
+          const screenPoint = eventToPixel(el, event);
+          handleSelectionPointerMove(el, state, screenPoint.x, screenPoint.y);
+        }
         return;
       }
       if (!state.drawing || !layerPoint) {

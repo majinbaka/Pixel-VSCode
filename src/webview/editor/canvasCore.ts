@@ -52,8 +52,8 @@ export function getActivePivot(state: EditorState, layer?: Layer): Pivot | undef
 }
 
 export function updateCanvasDisplaySize(el: Elements, state: EditorState): void {
-  el.canvas.style.width = `${el.canvas.width * state.zoom}px`;
-  el.canvas.style.height = `${el.canvas.height * state.zoom}px`;
+  el.canvas.style.width = `${Math.round(el.canvas.width * state.zoom)}px`;
+  el.canvas.style.height = `${Math.round(el.canvas.height * state.zoom)}px`;
   el.canvasFrame.style.setProperty('--pixel-size', `${state.zoom}px`);
   el.canvasFrame.style.setProperty('--guide-size', `${state.zoom * state.guideSize}px`);
 }

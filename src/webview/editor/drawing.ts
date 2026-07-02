@@ -21,6 +21,14 @@ export function eventToPixel(el: Elements, event: PointerEvent | MouseEvent): Po
   };
 }
 
+export function eventToSubPixel(el: Elements, event: PointerEvent | MouseEvent): Point {
+  const rect = el.canvas.getBoundingClientRect();
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * el.canvas.width,
+    y: ((event.clientY - rect.top) / rect.height) * el.canvas.height
+  };
+}
+
 function unrotatePoint(x: number, y: number, pivot: { x: number; y: number }, angle: number): Point {
   const cos = Math.cos(-angle);
   const sin = Math.sin(-angle);

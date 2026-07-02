@@ -2,6 +2,15 @@ import { Elements } from './dom';
 import { EditorState, Layer, Pivot } from './state';
 import { createLayerCanvas, createPivot, getActiveLayer, getActivePivot, renderComposite } from './canvasCore';
 
+function snapAngleToDegree(angle: number): number {
+  return Math.round((angle * 180) / Math.PI) * (Math.PI / 180);
+}
+
+function snapToGuide(state: EditorState, value: number): number {
+  if (!state.snapToGuide || state.guideSize <= 1) return Math.round(value);
+  return Math.round(value / state.guideSize) * state.guideSize;
+}
+
 export function rigHandleDistance(el: Elements): number {
   return Math.max(el.canvas.width, el.canvas.height) / 4;
 }
@@ -202,7 +211,7 @@ export function handleRigPointerDown(el: Elements, state: EditorState, x: number
     state.rig.dragMode = 'rotate';
     const dx = x - pivot.x;
     const dy = y - pivot.y;
-    pivot.angle = Math.atan2(dy, dx) + Math.PI / 2;
+    pivot.angle = snapAngleToDegree(Math.atan2(dy, dx) + Math.PI / 2);
     updateRigAngleInput(el, state, layer);
     renderComposite(el, state);
   }
@@ -222,12 +231,12 @@ export function handleRigPointerMove(el: Elements, state: EditorState, x: number
   }
 
   if (state.rig.dragMode === 'pivot') {
-    pivot.x = x;
-    pivot.y = y;
+    pivot.x = snapToGuide(state, x);
+    pivot.y = snapToGuide(state, y);
   } else if (state.rig.dragMode === 'rotate') {
     const dx = x - pivot.x;
     const dy = y - pivot.y;
-    pivot.angle = Math.atan2(dy, dx) + Math.PI / 2;
+    pivot.angle = snapAngleToDegree(Math.atan2(dy, dx) + Math.PI / 2);
     updateRigAngleInput(el, state, layer);
   }
 
@@ -235,26 +244,77 @@ export function handleRigPointerMove(el: Elements, state: EditorState, x: number
   renderRigOverlay(el, state);
 }
 
+function rotateNearestNeighbor(
+  source: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  pivotX: number,
+  pivotY: number,
+  angle: number,
+  blockSize: number
+): ImageData {
+  const src = source.getImageData(0, 0, width, height);
+  const dst = source.createImageData(width, height);
+  const cos = Math.cos(-angle);
+  const sin = Math.sin(-angle);
+  const step = Math.max(1, Math.floor(blockSize));
+
+  for (let by = 0; by < height; by += step) {
+    for (let bx = 0; bx < width; bx += step) {
+      const relX = bx + step / 2 - pivotX;
+      const relY = by + step / 2 - pivotY;
+      const srcCenterX = pivotX + (relX * cos - relY * sin);
+      const srcCenterY = pivotY + (relX * sin + relY * cos);
+      if (srcCenterX < 0 || srcCenterX >= width || srcCenterY < 0 || srcCenterY >= height) {
+        continue;
+      }
+      const maxBx = Math.max(0, Math.floor((width - 1) / step) * step);
+      const maxBy = Math.max(0, Math.floor((height - 1) / step) * step);
+      const srcBx = Math.min(maxBx, Math.floor(srcCenterX / step) * step);
+      const srcBy = Math.min(maxBy, Math.floor(srcCenterY / step) * step);
+      const sampleX = Math.min(width - 1, srcBx + Math.floor(step / 2));
+      const sampleY = Math.min(height - 1, srcBy + Math.floor(step / 2));
+      const sampleIndex = (sampleY * width + sampleX) * 4;
+      const r = src.data[sampleIndex];
+      const g = src.data[sampleIndex + 1];
+      const b = src.data[sampleIndex + 2];
+      const a = src.data[sampleIndex + 3];
+
+      for (let oy = 0; oy < step && by + oy < height; oy++) {
+        for (let ox = 0; ox < step && bx + ox < width; ox++) {
+          const dstIndex = ((by + oy) * width + (bx + ox)) * 4;
+          dst.data[dstIndex] = r;
+          dst.data[dstIndex + 1] = g;
+          dst.data[dstIndex + 2] = b;
+          dst.data[dstIndex + 3] = a;
+        }
+      }
+    }
+  }
+
+  return dst;
+}
+
 export function bakeRigRotation(el: Elements, state: EditorState, layer: Layer | undefined): boolean {
   if (!layer || !layer.rig.pivots.some((pivot) => pivot.angle)) {
     return false;
   }
 
-  const rotated = createLayerCanvas(el.canvas.width, el.canvas.height);
-  const rotatedCtx = rotated.getContext('2d')!;
-  rotatedCtx.imageSmoothingEnabled = false;
-  rotatedCtx.save();
-  for (const pivot of layer.rig.pivots) {
-    if (pivot.angle) {
-      rotatedCtx.translate(pivot.x, pivot.y);
-      rotatedCtx.rotate(pivot.angle);
-      rotatedCtx.translate(-pivot.x, -pivot.y);
-    }
-  }
-  rotatedCtx.drawImage(layer.canvas, 0, 0);
-  rotatedCtx.restore();
+  const width = el.canvas.width;
+  const height = el.canvas.height;
+  const blockSize = state.snapToGuide && state.guideSize > 1 ? state.guideSize : 1;
+  let sourceCanvas = layer.canvas;
 
-  layer.canvas = rotated;
+  for (const pivot of layer.rig.pivots) {
+    if (!pivot.angle) continue;
+    const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true })!;
+    const rotatedData = rotateNearestNeighbor(sourceCtx, width, height, pivot.x, pivot.y, pivot.angle, blockSize);
+    const nextCanvas = createLayerCanvas(width, height);
+    nextCanvas.getContext('2d')!.putImageData(rotatedData, 0, 0);
+    sourceCanvas = nextCanvas;
+  }
+
+  layer.canvas = sourceCanvas;
   for (const pivot of layer.rig.pivots) {
     pivot.angle = 0;
   }

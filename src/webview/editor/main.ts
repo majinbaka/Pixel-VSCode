@@ -48,6 +48,7 @@ import {
   drawAt,
   eventToLayerPixel,
   eventToPixel,
+  eventToSubPixel,
   floodFill,
   hideCursorOverlay,
   pickColor,
@@ -270,7 +271,8 @@ declare const acquireVsCodeApi: () => VsCodeApi;
     }
 
     if (state.tool === 'rig') {
-      handleRigPointerDown(el, state, screenPoint.x, screenPoint.y);
+      const subPixel = eventToSubPixel(el, event);
+      handleRigPointerDown(el, state, subPixel.x, subPixel.y);
       return;
     }
 
@@ -322,14 +324,19 @@ declare const acquireVsCodeApi: () => VsCodeApi;
     }
 
     if (state.tool === 'rig') {
-      const screenPoint = eventToPixel(el, event);
-      handleRigPointerMove(el, state, screenPoint.x, screenPoint.y);
+      const subPixel = eventToSubPixel(el, event);
+      handleRigPointerMove(el, state, subPixel.x, subPixel.y);
       return;
     }
 
     if (isSelectionTool(state.tool)) {
-      const screenPoint = eventToPixel(el, event);
-      handleSelectionPointerMove(el, state, screenPoint.x, screenPoint.y);
+      if (state.selection.isDraggingContent) {
+        const subPixel = eventToSubPixel(el, event);
+        handleSelectionPointerMove(el, state, subPixel.x, subPixel.y);
+      } else {
+        const screenPoint = eventToPixel(el, event);
+        handleSelectionPointerMove(el, state, screenPoint.x, screenPoint.y);
+      }
       return;
     }
 

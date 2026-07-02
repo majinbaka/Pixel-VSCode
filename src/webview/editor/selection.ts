@@ -158,13 +158,19 @@ export function startMoveSelection(el: Elements, state: EditorState, x: number, 
   return true;
 }
 
+function snapToGrid(value: number, step: number): number {
+  return Math.round(value / step) * step;
+}
+
 export function moveDragSelection(el: Elements, state: EditorState, x: number, y: number): void {
   const sel = state.selection;
   if (!sel.isDraggingContent) return;
-  const newX = x - sel.dragOffX;
-  const newY = y - sel.dragOffY;
+  const step = state.snapToGuide && state.guideSize > 1 ? state.guideSize : 1;
+  const newX = snapToGrid(x - sel.dragOffX, step);
+  const newY = snapToGrid(y - sel.dragOffY, step);
   const dx = newX - sel.floatX;
   const dy = newY - sel.floatY;
+  if (dx === 0 && dy === 0) return;
   sel.floatX = newX;
   sel.floatY = newY;
   if (sel.shape === 'lasso') {
@@ -188,6 +194,14 @@ export function renderCompositeWithFloat(el: Elements, state: EditorState): void
   }
 }
 
+function snapSelectionPoint(state: EditorState, x: number, y: number): { x: number; y: number } {
+  if (!state.snapToGuide || state.guideSize <= 1) return { x, y };
+  return {
+    x: Math.round(x / state.guideSize) * state.guideSize,
+    y: Math.round(y / state.guideSize) * state.guideSize
+  };
+}
+
 export function handleSelectionPointerDown(
   el: Elements,
   state: EditorState,
@@ -201,12 +215,13 @@ export function handleSelectionPointerDown(
     return;
   }
   if (sel.active) flattenSelection(el, state, onCommit);
+  const snapped = sel.shape === 'lasso' ? { x, y } : snapSelectionPoint(state, x, y);
   sel.isDrawing = true;
-  sel.startX = x;
-  sel.startY = y;
+  sel.startX = snapped.x;
+  sel.startY = snapped.y;
   sel.active = false;
   sel.lassoPoints = sel.shape === 'lasso' ? [{ x, y }] : [];
-  sel.x = x; sel.y = y; sel.w = 0; sel.h = 0;
+  sel.x = snapped.x; sel.y = snapped.y; sel.w = 0; sel.h = 0;
   renderSelectionOverlay(el, state);
   updateSelectionButtons(el, state);
 }
@@ -221,8 +236,9 @@ export function handleSelectionPointerMove(el: Elements, state: EditorState, x: 
   if (sel.shape === 'lasso') {
     sel.lassoPoints.push({ x, y });
   } else {
-    sel.w = x - sel.startX;
-    sel.h = y - sel.startY;
+    const snapped = snapSelectionPoint(state, x, y);
+    sel.w = snapped.x - sel.startX;
+    sel.h = snapped.y - sel.startY;
   }
   renderSelectionOverlay(el, state);
 }
@@ -243,8 +259,9 @@ export function handleSelectionPointerUp(el: Elements, state: EditorState, x: nu
       sel.lassoPoints = [];
     }
   } else {
-    sel.w = x - sel.startX;
-    sel.h = y - sel.startY;
+    const snapped = snapSelectionPoint(state, x, y);
+    sel.w = snapped.x - sel.startX;
+    sel.h = snapped.y - sel.startY;
     sel.active = Math.abs(sel.w) >= 1 && Math.abs(sel.h) >= 1;
   }
 
@@ -333,10 +350,10 @@ export function renderSelectionOverlay(el: Elements, state: EditorState): void {
     el.selectionDragCanvas.width = sel.floatCanvas.width;
     el.selectionDragCanvas.height = sel.floatCanvas.height;
     el.selectionDragCanvas.getContext('2d')!.drawImage(sel.floatCanvas, 0, 0);
-    el.selectionDragCanvas.style.left = `${sel.floatX * state.zoom}px`;
-    el.selectionDragCanvas.style.top = `${sel.floatY * state.zoom}px`;
-    el.selectionDragCanvas.style.width = `${sel.floatCanvas.width * state.zoom}px`;
-    el.selectionDragCanvas.style.height = `${sel.floatCanvas.height * state.zoom}px`;
+    el.selectionDragCanvas.style.left = `${Math.round(sel.floatX * state.zoom)}px`;
+    el.selectionDragCanvas.style.top = `${Math.round(sel.floatY * state.zoom)}px`;
+    el.selectionDragCanvas.style.width = `${Math.round(sel.floatCanvas.width * state.zoom)}px`;
+    el.selectionDragCanvas.style.height = `${Math.round(sel.floatCanvas.height * state.zoom)}px`;
     el.selectionDragCanvas.hidden = false;
   }
 }
